@@ -1,300 +1,1099 @@
-# Nest + tool 实现 OpenClaw 同款定时任务功能（上）
+# FastAPI + Tool 实现 OpenClaw 同款定时任务功能（上）
 
-> **Python 版** | 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 技术栈
+> **Python 版** | 基于 FastAPI + LangChain Python 技术栈
+> 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 版本
 
 ---
 
-神光的幸福生活 2026年3月13日 12:46
+## 为什么需要定时任务？
 
 定时任务是 Agent 常见功能。
 
-比如你用豆包的时候：
+比如你用豆包的时候，让它某个时间做某件事情。它会调用定时任务的 Tool 设置一个提醒，并且你可以单独管理所有的提醒。
 
-> 🎬 视频演示（原公众号视频）
+OpenClaw 当然也有定时任务功能。我们看下它是怎么实现的：
 
-你让它某个时间做某件事情。
-
-它会调用定时任务的 tool 设置一个提醒，并且你可以单独管理所有的提醒。
-
-OpenClaw 当然也有定时任务功能。
-
-我们看下它是怎么实现的：
-
-把 OpenClaw 的仓库代码下下来，让 ai 分析下：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/0_公众号_Yi昭.png)
+![OpenClaw 定时任务分析](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/0_公众号_Yi昭.png)
 
 可以看到，OpenClaw 的定时任务有两种：
 
-- 可以创建定时任务，传入文本，到时间会启动一个 Agent Loop 来执行
-- 心跳机制定期主动做一些事情
+| 类型 | 说明 |
+|------|------|
+| **定时任务** | 创建定时任务，传入文本，到时间会启动一个 Agent Loop 来执行 |
+| **心跳机制** | 定期主动做一些事情 |
 
-到时间后跑一个 agent loop 循环调用 tool call 做事情：
+到时间后跑一个 Agent Loop 循环调用 Tool Call 做事情：
 
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/1_公众号_Yi昭.png)
+![Agent Loop 执行](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/1_公众号_Yi昭.png)
 
-它并没有把定时任务封装成 tool，但是有执行命令的 tool，所以绕了一层，也是一样：
+它并没有把定时任务封装成 Tool，但是有执行命令的 Tool，所以绕了一层，也是一样：
 
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/2_公众号_Yi昭.png)
+![执行命令 Tool](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/2_公众号_Yi昭.png)
 
-再来看下 Nanobot 的实现，它是 mini 版 OpenClaw
+再来看下 Nanobot 的实现，它是 mini 版 OpenClaw：
 
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/3_公众号_Yi昭.png)
+![Nanobot 实现1](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/3_公众号_Yi昭.png)
 
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/4_公众号_Yi昭.png)
+![Nanobot 实现2](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/4_公众号_Yi昭.png)
 
 也就是这个流程：
 
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/5_公众号_Yi昭.png)
+![定时任务流程](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/5_公众号_Yi昭.png)
+
+```
+用户设置定时任务
+    ↓
+创建定时任务（存储任务描述、执行时间）
+    ↓
+定时任务调度器（到时间触发）
+    ↓
+启动 Agent Loop（循环调用 Tool）
+    ↓
+执行任务（调用各种 Tool：搜索、邮件、命令等）
+```
 
 既然各种 Agent 都有定时任务功能，那我们也按照这个方案实现一遍，后面可以集成到我们的 Agent 项目里。
 
-创建 FastAPI 项目：
-
-    nest new cron-job-tool
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/6_公众号_Yi昭.png)
-
-安装 langchain 和管理配置的包
-
-    ppip install langchain_core langchain_openai zod fastapi.config
-
-生成一个 ai 的模块：
-
-    nest g res ai --no-spec
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/7_公众号_Yi昭.png)
-
-在 AppModule 引入配置模块：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/8_公众号_Yi昭.png)
-
-并且根目录创建配置文件 .env
-
-    OPENAI_API_KEY=sk-xxxOPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1MODEL_NAME=qwen-plus
-
-然后创建 ChatModel 的 provider：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/9_公众号_Yi昭.png)
-
-有了 model 之后，改下 service，实现 ai 功能：
-
-    import&nbsp;{ Inject, Injectable }&nbsp;from'fastapi.common';import&nbsp;{ ChatOpenAI }&nbsp;from'langchain_openai';import&nbsp;{ tool }&nbsp;from'langchain_core/tools';import&nbsp;{&nbsp; AIMessage,&nbsp; BaseMessage,&nbsp; HumanMessage,&nbsp; SystemMessage,&nbsp; ToolMessage,}&nbsp;from'langchain_core/messages';import&nbsp;{ z }&nbsp;from'zod';import&nbsp;{ Runnable }&nbsp;from'langchain_core/runnables';const&nbsp;database = {users: {&nbsp; &nbsp;&nbsp;'001': {&nbsp;id:&nbsp;'001',&nbsp;name:&nbsp;'张三',&nbsp;email:&nbsp;'zhangsan@example.com',&nbsp;role:&nbsp;'admin'&nbsp;},&nbsp; &nbsp;&nbsp;'002': {&nbsp;id:&nbsp;'002',&nbsp;name:&nbsp;'李四',&nbsp;email:&nbsp;'lisi@example.com',&nbsp;role:&nbsp;'user'&nbsp;},&nbsp; &nbsp;&nbsp;'003': {&nbsp;id:&nbsp;'003',&nbsp;name:&nbsp;'王五',&nbsp;email:&nbsp;'wangwu@example.com',&nbsp;role:&nbsp;'user'&nbsp;},&nbsp; },};const&nbsp;queryUserArgsSchema = z.object({userId: z.string().describe('用户 ID，例如: 001, 002, 003'),});type QueryUserArgs = {&nbsp; &nbsp;&nbsp;userId: string;}const&nbsp;queryUserTool = tool(async&nbsp;({ userId }: QueryUserArgs) =&gt; {&nbsp; &nbsp;&nbsp;const&nbsp;user = database.users[userId];&nbsp; &nbsp;&nbsp;if&nbsp;(!user) {&nbsp; &nbsp; &nbsp;&nbsp;return`用户 ID&nbsp;${userId}&nbsp;不存在。可用的 ID: 001, 002, 003`;&nbsp; &nbsp; }&nbsp; &nbsp;&nbsp;return`用户信息：\n- ID:&nbsp;${user.id}\n- 姓名:&nbsp;${user.name}\n- 邮箱:&nbsp;${user.email}\n- 角色:&nbsp;${user.role}`;&nbsp; },&nbsp; {&nbsp; &nbsp;&nbsp;name:&nbsp;'query_user',&nbsp; &nbsp;&nbsp;description:&nbsp; &nbsp; &nbsp;&nbsp;'查询数据库中的用户信息。输入用户 ID，返回该用户的详细信息（姓名、邮箱、角色）。',&nbsp; &nbsp;&nbsp;schema: queryUserArgsSchema,&nbsp; },);@Injectable()exportclass&nbsp;AiService&nbsp;{&nbsp; private readonly modelWithTools: Runnable&lt;BaseMessage[], AIMessage&gt;;constructor(@Inject('CHAT_MODEL') model: ChatOpenAI) {&nbsp; &nbsp;&nbsp;this.modelWithTools = model.bindTools([queryUserTool]);&nbsp; }async&nbsp;runChain(query: string):&nbsp;Promise&lt;string&gt; {&nbsp; &nbsp;&nbsp;const&nbsp;messages: BaseMessage[] = [&nbsp; &nbsp; &nbsp;&nbsp;new&nbsp;SystemMessage(&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'你是一个智能助手，可以在需要时调用工具（如 query_user）来查询用户信息，再用结果回答用户的问题。',&nbsp; &nbsp; &nbsp; ),&nbsp; &nbsp; &nbsp;&nbsp;new&nbsp;HumanMessage(query),&nbsp; &nbsp; ];&nbsp; &nbsp;&nbsp;while&nbsp;(true) {&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;aiMessage =&nbsp;awaitthis.modelWithTools.invoke(messages);&nbsp; &nbsp; &nbsp; messages.push(aiMessage);&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;toolCalls = aiMessage.tool_calls ?? [];&nbsp; &nbsp; &nbsp;&nbsp;// 没有要调用的工具，直接把回答返回给调用方&nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!toolCalls.length) {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return&nbsp;aiMessage.content&nbsp;as&nbsp;string;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;// 依次执行本轮需要调用的所有工具&nbsp; &nbsp; &nbsp;&nbsp;for&nbsp;(const&nbsp;toolCall&nbsp;of&nbsp;toolCalls) {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;toolCallId = toolCall.id ||&nbsp;'';&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;toolName = toolCall.name;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(toolName ===&nbsp;'query_user') {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;args = queryUserArgsSchema.parse(toolCall.args);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;result =&nbsp;await&nbsp;queryUserTool.invoke(args);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; messages.push(&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;new&nbsp;ToolMessage({&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;tool_call_id: toolCallId,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;name: toolName,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;content: result,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }),&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; );&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; }&nbsp; }}
-
-首先上面这部分就是一个 tool：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/10_公众号_Yi昭.png)
-
-读取用户信息的 tool。
-
-这里的类型要注意一下：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/11_公众号_Yi昭.png)
-
-Runnable 的第一个类型参数是输入，第二个类型参数是输出。
-
-因为这次要调用 tool 了嘛，所以不再是直接 invoke，而是需要一个 agent loop
-
-用 while(true) 循环，直到没有 tool call 就返回
-
-否则调用 tool，返回的结果通过 ToolMessage 放到 messages 数组里
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/12_公众号_Yi昭.png)
-
-然后我们在 AiRouter 添加下路由：
-
-    import&nbsp;{ Router, Get, Query }&nbsp;from'fastapi.common';import&nbsp;{ AiService }&nbsp;from'./ai.service';@Router('ai')exportclass&nbsp;AiRouter&nbsp;{constructor(private readonly aiService: AiService) {}&nbsp; @Get('chat')async&nbsp;chat(@Query('query') query: string) {&nbsp; &nbsp;&nbsp;const&nbsp;answer =&nbsp;awaitthis.aiService.runChain(query);&nbsp; &nbsp;&nbsp;return&nbsp;{ answer };&nbsp; }}
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-然后我们再来实现一个流式版本：
-
-AiService 里加个方法：
-
-    async&nbsp;*runChainStream(query: string): AsyncIterable&lt;string&gt; {&nbsp; &nbsp;const&nbsp;messages: BaseMessage[] = [&nbsp; &nbsp; &nbsp;new&nbsp;SystemMessage(&nbsp; &nbsp; &nbsp; &nbsp;'你是一个智能助手，可以在需要时调用工具（如 query_user）来查询用户信息，再用结果回答用户的问题。',&nbsp; &nbsp; &nbsp;),&nbsp; &nbsp; &nbsp;new&nbsp;HumanMessage(query),&nbsp; &nbsp;];&nbsp; &nbsp;while&nbsp;(true) {&nbsp; &nbsp; &nbsp;// 一轮对话：先让模型思考并（可能）提出工具调用&nbsp; &nbsp; &nbsp;const&nbsp;stream =&nbsp;awaitthis.modelWithTools.stream(messages);&nbsp; &nbsp; &nbsp;let&nbsp;fullAIMessage: AIMessageChunk |&nbsp;null&nbsp;=&nbsp;null;&nbsp; &nbsp; &nbsp;forawait&nbsp;(const&nbsp;chunk&nbsp;of&nbsp;stream&nbsp;as&nbsp;AsyncIterable&lt;AIMessageChunk&gt;) {&nbsp; &nbsp; &nbsp; &nbsp;// 使用 concat 持续拼接，得到本轮完整的 AIMessageChunk&nbsp; &nbsp; &nbsp; &nbsp;fullAIMessage = fullAIMessage ? fullAIMessage.concat(chunk) : chunk;&nbsp; &nbsp; &nbsp; &nbsp;const&nbsp;hasToolCallChunk =&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;!!fullAIMessage.tool_call_chunks &amp;&amp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;fullAIMessage.tool_call_chunks.length &gt;&nbsp;0;&nbsp; &nbsp; &nbsp; &nbsp;// 只要当前轮次还没出现 tool 调用的 chunk，就可以把文本内容流式往外推&nbsp; &nbsp; &nbsp; &nbsp;if&nbsp;(!hasToolCallChunk &amp;&amp; chunk.content) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;yield&nbsp;chunk.content&nbsp;as&nbsp;string&nbsp; &nbsp; &nbsp; &nbsp;}&nbsp; &nbsp; &nbsp;}&nbsp; &nbsp; &nbsp;if&nbsp;(!fullAIMessage) {&nbsp; &nbsp; &nbsp; &nbsp;return;&nbsp; &nbsp; &nbsp;}&nbsp; &nbsp; &nbsp;messages.push(fullAIMessage);&nbsp; &nbsp; &nbsp;const&nbsp;toolCalls = fullAIMessage.tool_calls ?? [];&nbsp; &nbsp; &nbsp;// 没有工具调用：说明这一轮就是最终回答，已经在上面的 for-await 中流完了，可以结束&nbsp; &nbsp; &nbsp;if&nbsp;(!toolCalls.length) {&nbsp; &nbsp; &nbsp; &nbsp;return;&nbsp; &nbsp; &nbsp;}&nbsp; &nbsp; &nbsp;// 有工具调用：本轮我们不再额外输出内容，而是执行工具，生成 ToolMessage，进入下一轮&nbsp; &nbsp; &nbsp;for&nbsp;(const&nbsp;toolCall&nbsp;of&nbsp;toolCalls) {&nbsp; &nbsp; &nbsp; &nbsp;const&nbsp;toolCallId = toolCall.id ||&nbsp;'';&nbsp; &nbsp; &nbsp; &nbsp;const&nbsp;toolName = toolCall.name;&nbsp; &nbsp; &nbsp; &nbsp;if&nbsp;(toolName ===&nbsp;'query_user') {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;const&nbsp;args = queryUserArgsSchema.parse(toolCall.args);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;const&nbsp;result =&nbsp;await&nbsp;queryUserTool.invoke(args);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;messages.push(&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;new&nbsp;ToolMessage({&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;tool_call_id: toolCallId,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;name: toolName,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;content: result,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;}),&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;);&nbsp; &nbsp; &nbsp; &nbsp;}&nbsp; &nbsp; &nbsp;}&nbsp; &nbsp;}&nbsp;}
-
-主要是流式的处理部分：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/13_公众号_Yi昭.png)
-
-这里 stream 返回的是一个个 chunk
-
-我们判断如果没有 tool\_call\_chunks 代表不是工具调用，那就直接 yeild 返回内容
-
-否则，就进入下面的工具调用逻辑，那部分和之前一样，concat 结束之后就是完整的 tool\_calls 了。
-
-在 AiRouter 里加一个 sse 接口：
-
-    @Sse('chat/stream')chatStream(@Query('query') query: string): Observable&lt;MessageEvent&gt; {&nbsp;&nbsp;const&nbsp;stream =&nbsp;this.aiService.runChainStream(query);&nbsp;&nbsp;return&nbsp;from(stream).pipe(&nbsp; &nbsp; map((chunk) =&gt;&nbsp;({&nbsp; &nbsp; &nbsp;&nbsp;data: chunk,&nbsp; &nbsp; })),&nbsp; );}
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-这样，我们就完成了 tool + 流式 + sse。
-
-但我们现在的 tool 太简单了，能不能 tool 里调用 service 呢？
-
-比如 tool 里面调用 service 来做数据库增删改查？
-
-其实也很简单，和之前的 ChatModel 一样定义个 provider 就好了：
-
-首先我们加一个 ai/user.service.ts
-
-    import&nbsp;{ Injectable }&nbsp;from'fastapi.common';type User = {id: string;&nbsp; name: string;&nbsp; email: string;&nbsp; role: string;};@Injectable()exportclass&nbsp;UserService&nbsp;{&nbsp; private readonly users =&nbsp;newMap&lt;string, User&gt;([&nbsp; &nbsp; ['001', {&nbsp;id:&nbsp;'001',&nbsp;name:&nbsp;'赵云',&nbsp;email:&nbsp;'zhaoyun@example.com',&nbsp;role:&nbsp;'admin'&nbsp;}],&nbsp; &nbsp; ['002', {&nbsp;id:&nbsp;'002',&nbsp;name:&nbsp;'诸葛亮',&nbsp;email:&nbsp;'zhugeliang@example.com',&nbsp;role:&nbsp;'manager'&nbsp;}],&nbsp; &nbsp; ['003', {&nbsp;id:&nbsp;'003',&nbsp;name:&nbsp;'关羽',&nbsp;email:&nbsp;'guanyu@example.com',&nbsp;role:&nbsp;'user'&nbsp;}],&nbsp; &nbsp; ['004', {&nbsp;id:&nbsp;'004',&nbsp;name:&nbsp;'张飞',&nbsp;email:&nbsp;'zhangfei@example.com',&nbsp;role:&nbsp;'user'&nbsp;}],&nbsp; &nbsp; ['005', {&nbsp;id:&nbsp;'005',&nbsp;name:&nbsp;'刘备',&nbsp;email:&nbsp;'liubei@example.com',&nbsp;role:&nbsp;'owner'&nbsp;}],&nbsp; &nbsp; ['006', {&nbsp;id:&nbsp;'006',&nbsp;name:&nbsp;'黄忠',&nbsp;email:&nbsp;'huangzhong@example.com',&nbsp;role:&nbsp;'user'&nbsp;}],&nbsp; ]);&nbsp; findAll(): User[] {&nbsp; &nbsp;&nbsp;returnArray.from(this.users.values());&nbsp; }&nbsp; findOne(id: string): User |&nbsp;undefined&nbsp;{&nbsp; &nbsp;&nbsp;returnthis.users.get(id);&nbsp; }&nbsp; create(user: User): User {&nbsp; &nbsp;&nbsp;this.users.set(user.id, user);&nbsp; &nbsp;&nbsp;return&nbsp;user;&nbsp; }&nbsp; update(id: string,&nbsp;partial: Partial&lt;Omit&lt;User,&nbsp;'id'&gt;&gt;): User |&nbsp;undefined&nbsp;{&nbsp; &nbsp;&nbsp;const&nbsp;existing =&nbsp;this.users.get(id);&nbsp; &nbsp;&nbsp;if&nbsp;(!existing) {&nbsp; &nbsp; &nbsp;&nbsp;returnundefined;&nbsp; &nbsp; }&nbsp; &nbsp;&nbsp;const&nbsp;updated: User = {&nbsp; &nbsp; &nbsp; ...existing,&nbsp; &nbsp; &nbsp; ...partial,&nbsp; &nbsp; &nbsp;&nbsp;id: existing.id,&nbsp; &nbsp; };&nbsp; &nbsp;&nbsp;this.users.set(id, updated);&nbsp; &nbsp;&nbsp;return&nbsp;updated;&nbsp; }&nbsp; remove(id: string): boolean {&nbsp; &nbsp;&nbsp;returnthis.users.delete(id);&nbsp; }}
-
-这里面定义了 mock 的增删改查
-
-然后加一个 provider：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/14_公众号_Yi昭.png)
-
-    {&nbsp;&nbsp;provide:&nbsp;'QUERY_USER_TOOL',useFactory:&nbsp;(userService: UserService) =&gt;&nbsp;{&nbsp; &nbsp;&nbsp;const&nbsp;queryUserArgsSchema = z.object({&nbsp; &nbsp; &nbsp;&nbsp;userId: z.string().describe('用户 ID，例如: 001, 002, 003'),&nbsp; &nbsp; });&nbsp; &nbsp;&nbsp;return&nbsp;tool(&nbsp; &nbsp; &nbsp;&nbsp;async&nbsp;({ userId }: {&nbsp;userId: string }) =&gt; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;user = userService.findOne(userId);&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!user) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;availableIds = userService&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .findAll()&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .map((u) =&gt;&nbsp;u.id)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .join(', ');&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`用户 ID&nbsp;${userId}&nbsp;不存在。可用的 ID:&nbsp;${availableIds}`;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`用户信息：\n- ID:&nbsp;${user.id}\n- 姓名:&nbsp;${user.name}\n- 邮箱:&nbsp;${user.email}\n- 角色:&nbsp;${user.role}`;&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; &nbsp; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;name:&nbsp;'query_user',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;description:&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'查询数据库中的用户信息。输入用户 ID，返回该用户的详细信息（姓名、邮箱、角色）。',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;schema: queryUserArgsSchema,&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; );&nbsp; },inject: [UserService],},
-
-唯一的区别就是现在的实现用注入的 userSerivce 来做，返回 tool
-
-然后替换下之前的 tool：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/15_公众号_Yi昭.png)
-
-调用的也换成这个：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/16_公众号_Yi昭.png)
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/17_公众号_Yi昭.png)
-
-再跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-这样我们就打通了 tool 里调用 service
-
-那自然就可以实现数据库增删改查的 tool、发送邮件的 tool
-
-我们用 qq 邮箱的 smtp 服务发送邮件
-
-> 🎬 视频演示（原公众号视频）
-
-拿到授权码之后，我们安装下 nodemailer
-
-    ppip install nodemailer @nestjs-modules/mailer
-
-在 AppModule 引入下：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/18_公众号_Yi昭.png)
-
-    MailerModule.forRootAsync({&nbsp;&nbsp;inject: [ConfigService],useFactory:&nbsp;(configService: ConfigService) =&gt;&nbsp;({&nbsp; &nbsp;&nbsp;transport: {&nbsp; &nbsp; &nbsp;&nbsp;host: configService.get&lt;string&gt;('MAIL_HOST'),&nbsp; &nbsp; &nbsp;&nbsp;port:&nbsp;Number(configService.get&lt;string&gt;('MAIL_PORT')),&nbsp; &nbsp; &nbsp;&nbsp;secure: configService.get&lt;string&gt;('MAIL_SECURE') ===&nbsp;'true',&nbsp; &nbsp; &nbsp;&nbsp;auth: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;user: configService.get&lt;string&gt;('MAIL_USER'),&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;pass: configService.get&lt;string&gt;('MAIL_PASS'),&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; },&nbsp; &nbsp;&nbsp;defaults: {&nbsp; &nbsp; &nbsp;&nbsp;from:&nbsp; &nbsp; &nbsp; &nbsp; configService.get&lt;string&gt;('MAIL_FROM')&nbsp; &nbsp; },&nbsp; }),}),
-
-这里的配置也是放在 .env 里：
-
-    MAIL_HOST=smtp.qq.comMAIL_PORT=587MAIL_SECURE=falseMAIL_USER=你的邮箱MAIL_PASS=你的授权码MAIL_FROM="No Reply"&nbsp;&lt;你的邮箱&gt;
-
-我们把它封装成 tool
-
-在 AiModule 加上这个 provider：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/19_公众号_Yi昭.png)
-
-    {&nbsp;&nbsp;provide:&nbsp;'SEND_MAIL_TOOL',useFactory:&nbsp;(mailerService: MailerService, configService: ConfigService) =&gt;&nbsp;{&nbsp; &nbsp;&nbsp;const&nbsp;sendMailArgsSchema = z.object({&nbsp; &nbsp; &nbsp;&nbsp;to: z&nbsp; &nbsp; &nbsp; &nbsp; .email()&nbsp; &nbsp; &nbsp; &nbsp; .describe('收件人邮箱地址，例如：someone@example.com'),&nbsp; &nbsp; &nbsp;&nbsp;subject: z.string().describe('邮件主题'),&nbsp; &nbsp; &nbsp;&nbsp;text: z.string().optional().describe('纯文本内容，可选'),&nbsp; &nbsp; &nbsp;&nbsp;html: z.string().optional().describe('HTML 内容，可选'),&nbsp; &nbsp; });&nbsp; &nbsp;&nbsp;return&nbsp;tool(&nbsp; &nbsp; &nbsp;&nbsp;async&nbsp;({to, subject, text, html}: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;to: string;&nbsp; &nbsp; &nbsp; &nbsp; subject: string;&nbsp; &nbsp; &nbsp; &nbsp; text?: string;&nbsp; &nbsp; &nbsp; &nbsp; html?: string;&nbsp; &nbsp; &nbsp; }) =&gt; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;fallbackFrom =&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; configService.get&lt;string&gt;('MAIL_FROM')&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;await&nbsp;mailerService.sendMail({&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; to,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; subject,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;text: text ??&nbsp;'（无文本内容）',&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;html: html ??&nbsp;`&lt;p&gt;${text ??&nbsp;'（无 HTML 内容）'}&lt;/p&gt;`,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;from: fallbackFrom,&nbsp; &nbsp; &nbsp; &nbsp; });&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`邮件已发送到&nbsp;${to}，主题为「${subject}」`;&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; &nbsp; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;name:&nbsp;'send_mail',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;description:&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'发送电子邮件。需要提供收件人邮箱、主题，可选文本内容和 HTML 内容。',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;schema: sendMailArgsSchema,&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; );&nbsp; },inject: [MailerService, ConfigService],},
-
-在 AiService 里注入下：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/20_公众号_Yi昭.png)
-
-tool 调用的地方也要加一下：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/21_公众号_Yi昭.png)
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/22_公众号_Yi昭.png)
-
-这样，我们就可以用自然语言调用这个工具了：
-
-测一下：
-
-> 🎬 视频演示（原公众号视频）
-
-这样，邮件发送的 tool 就跑通了。
-
-接下来实现网络搜索的 tool。
-
-用博查的 api：
-
-https://open.bochaai.com/
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/23_公众号_Yi昭.png)
-
-deepseek 的搜索就是用的这个：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/24_公众号_Yi昭.png)
-
-挺靠谱的。
-
-我们先搞一个 api key：
-
-> 🎬 视频演示（原公众号视频）
-
-添加到 .env 文件里
-
-    BOCHA_API_KEY=sk-xxx
-
-然后在 AiModule 添加一个 tool 的 provider：
-
-    {&nbsp;&nbsp;provide:&nbsp;'WEB_SEARCH_TOOL',useFactory:&nbsp;(configService: ConfigService) =&gt;&nbsp;{&nbsp; &nbsp;&nbsp;const&nbsp;webSearchArgsSchema = z.object({&nbsp; &nbsp; &nbsp;&nbsp;query: z&nbsp; &nbsp; &nbsp; &nbsp; .string()&nbsp; &nbsp; &nbsp; &nbsp; .min(1)&nbsp; &nbsp; &nbsp; &nbsp; .describe('搜索关键词，例如：公司年报、某个事件等'),&nbsp; &nbsp; &nbsp;&nbsp;count: z&nbsp; &nbsp; &nbsp; &nbsp; .number()&nbsp; &nbsp; &nbsp; &nbsp; .int()&nbsp; &nbsp; &nbsp; &nbsp; .min(1)&nbsp; &nbsp; &nbsp; &nbsp; .max(20)&nbsp; &nbsp; &nbsp; &nbsp; .optional()&nbsp; &nbsp; &nbsp; &nbsp; .describe('返回的搜索结果数量，默认 10 条'),&nbsp; &nbsp; });&nbsp; &nbsp;&nbsp;return&nbsp;tool(&nbsp; &nbsp; &nbsp;&nbsp;async&nbsp;({ query, count }: {&nbsp;query: string; count?: number }) =&gt; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;apiKey = configService.get&lt;string&gt;('BOCHA_API_KEY');&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!apiKey) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return'Bocha Web Search 的 API Key 未配置（环境变量 BOCHA_API_KEY），请先在服务端配置后再重试。';&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;url =&nbsp;'https://api.bochaai.com/v1/web-search';&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;body = {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; query,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;freshness:&nbsp;'noLimit',&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;summary:&nbsp;true,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;count: count ??&nbsp;10,&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;response =&nbsp;await&nbsp;fetch(url, {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;method:&nbsp;'POST',&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;headers: {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;Authorization:&nbsp;`Bearer&nbsp;${apiKey}`,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'Content-Type':&nbsp;'application/json',&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;body:&nbsp;JSON.stringify(body),&nbsp; &nbsp; &nbsp; &nbsp; });&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!response.ok) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;errorText =&nbsp;await&nbsp;response.text();&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`搜索 API 请求失败，状态码:&nbsp;${response.status}, 错误信息:&nbsp;${errorText}`;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;let&nbsp;json: any;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;try&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; json =&nbsp;await&nbsp;response.json();&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp;catch&nbsp;(e) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`搜索 API 请求失败，原因是：搜索结果解析失败&nbsp;${(e&nbsp;as&nbsp;Error).message}`;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;try&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(json.code !==&nbsp;200&nbsp;|| !json.data) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`搜索 API 请求失败，原因是:&nbsp;${json.msg ??&nbsp;'未知错误'}`;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;webpages = json.data.webPages?.value ?? [];&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!webpages.length) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return'未找到相关结果。';&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;formatted = webpages&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .map(&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;(page: any, idx: number) =&gt;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;`引用:&nbsp;${idx +&nbsp;1}标题:&nbsp;${page.name}URL:&nbsp;${page.url}摘要:&nbsp;${page.summary}网站名称:&nbsp;${page.siteName}网站图标:&nbsp;${page.siteIcon}发布时间:&nbsp;${page.dateLastCrawled}`,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; )&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .join('\n\n');&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return&nbsp;formatted;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp;catch&nbsp;(e) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return`搜索 API 请求失败，原因是：搜索结果解析失败&nbsp;${(e&nbsp;as&nbsp;Error).message}`;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; &nbsp; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;name:&nbsp;'web_search',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;description:&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'使用 Bocha Web Search API 搜索互联网网页。输入为搜索关键词（可选 count 指定结果数量），返回包含标题、URL、摘要、网站名称、图标和时间等信息的结果列表。',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;schema: webSearchArgsSchema,&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; );&nbsp; },inject: [ConfigService],},
-
-就是从配置文件拿到 apikey，通过 http 调用搜索接口，把结果格式化后给大模型。
-
-然后在 AiService 里用一下：
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/25_公众号_Yi昭.png)
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/26_公众号_Yi昭.png)
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/27_公众号_Yi昭.png)
-
-然后来测一下
-
-当然，sse 还是用界面测更好，我们加一个 html
-
-public/ai-sse-test.html
-
-    &lt;!doctype&nbsp;html&gt;&lt;html&nbsp;lang="zh-CN"&gt;&lt;head&gt;&nbsp; &nbsp;&nbsp;&lt;meta&nbsp;charset="UTF-8"&nbsp;/&gt;&nbsp; &nbsp;&nbsp;&lt;title&gt;AI SSE Chat 测试&lt;/title&gt;&nbsp; &nbsp;&nbsp;&lt;style&gt;&nbsp; &nbsp; &nbsp; * {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;box-sizing: border-box;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;body&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin:&nbsp;0;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;min-height:&nbsp;100vh;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-family: system-ui, -apple-system, BlinkMacSystemFont,&nbsp;'SF Pro Text',&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'Segoe UI', sans-serif;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;display: flex;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;align-items: center;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;justify-content: center;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#f5f5f5;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;24px16px;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.shell&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;width:&nbsp;100%;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;max-width:&nbsp;720px;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;h1&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;20px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin:&nbsp;0012px;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.card&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#ffffff;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;10px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border:&nbsp;1px&nbsp;solid&nbsp;#e5e7eb;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;box-shadow:&nbsp;04px12pxrgba(15,&nbsp;23,&nbsp;42,&nbsp;0.06);&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;16px18px18px;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;label&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;display: block;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;13px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-bottom:&nbsp;6px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#6b7280;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;textarea&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;width:&nbsp;100%;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;min-height:&nbsp;80px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;8px10px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;8px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border:&nbsp;1px&nbsp;solid&nbsp;#d1d5db;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;resize: vertical;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-family: inherit;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;14px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;outline: none;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;textarea::placeholder&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#9ca3af;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;textarea:focus&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-color:&nbsp;#3b82f6;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;box-shadow:&nbsp;0001pxrgba(59,&nbsp;130,&nbsp;246,&nbsp;0.3);&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.controls&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;display: flex;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;align-items: center;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-top:&nbsp;10px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;gap:&nbsp;10px;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;button&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;6px14px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;999px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border:&nbsp;1px&nbsp;solid&nbsp;#2563eb;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#3b82f6;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#ffffff;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;13px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;cursor: pointer;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;button:disabled&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;opacity:&nbsp;0.7;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;cursor: not-allowed;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.status&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;12px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#6b7280;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.output&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-top:&nbsp;16px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;10px10px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;8px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#111827;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#e5e7eb;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'Liberation Mono',&nbsp;'Courier New', monospace;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;white-space: pre-wrap;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;max-height:&nbsp;360px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;overflow-y: auto;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp;&nbsp;&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&nbsp; &nbsp;&nbsp;&lt;div&nbsp;class="shell"&gt;&nbsp; &nbsp; &nbsp;&nbsp;&lt;div&nbsp;class="card"&gt;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;h1&gt;AI SSE Chat 测试&lt;/h1&gt;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;label&nbsp;for="query"&gt;输入你的问题：&lt;/label&gt;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;textarea&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;id="query"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;placeholder="请输入要发送给 AI 的问题..."&nbsp; &nbsp; &nbsp; &nbsp; &gt;&lt;/textarea&gt;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;div&nbsp;class="controls"&gt;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;button&nbsp;id="sendBtn"&gt;开始对话（SSE）&lt;/button&gt;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;div&nbsp;class="status"&nbsp;id="status"&gt;状态：待机&lt;/div&gt;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;/div&gt;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&lt;div&nbsp;class="output"&nbsp;id="output"&gt;&lt;/div&gt;&nbsp; &nbsp; &nbsp;&nbsp;&lt;/div&gt;&nbsp; &nbsp;&nbsp;&lt;/div&gt;&nbsp; &nbsp;&nbsp;&lt;script&gt;&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;sendBtn =&nbsp;document.getElementById('sendBtn');&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;queryInput =&nbsp;document.getElementById('query');&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;outputEl =&nbsp;document.getElementById('output');&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;statusEl =&nbsp;document.getElementById('status');&nbsp; &nbsp; &nbsp;&nbsp;let&nbsp;es =&nbsp;null;&nbsp; &nbsp; &nbsp;&nbsp;function&nbsp;closeEventSource()&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(es) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; es.close();&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; es =&nbsp;null;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp; sendBtn.disabled =&nbsp;false;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; sendBtn.onclick =&nbsp;()&nbsp;=&gt;&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;query = queryInput.value.trim();&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!query) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; alert('请输入问题');&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp; closeEventSource();&nbsp; &nbsp; &nbsp; &nbsp; outputEl.textContent =&nbsp;'';&nbsp; &nbsp; &nbsp; &nbsp; sendBtn.disabled =&nbsp;true;&nbsp; &nbsp; &nbsp; &nbsp; statusEl.textContent =&nbsp;'状态：连接中…';&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;url =&nbsp;`/ai/chat/stream?query=${encodeURIComponent(query)}`;&nbsp; &nbsp; &nbsp; &nbsp; es =&nbsp;new&nbsp;EventSource(url);&nbsp; &nbsp; &nbsp; &nbsp; es.onopen =&nbsp;()&nbsp;=&gt;&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; statusEl.textContent =&nbsp;'状态：已连接，流式接收中…';&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; &nbsp; es.onmessage =&nbsp;(event) =&gt;&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;// 后端每个 chunk 用 data 发过来&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; outputEl.textContent += event.data;&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; &nbsp; es.onerror =&nbsp;()&nbsp;=&gt;&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; statusEl.textContent =&nbsp;'状态：连接结束或发生错误';&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; closeEventSource();&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp;&nbsp;window.addEventListener('beforeunload', closeEventSource);&nbsp; &nbsp;&nbsp;&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
-
-同样是 ai 写的页面，主要是用 EventSource 对接 sse 接口。
-
-在 AppModule 加一下静态文件的访问
-
-![image](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/28_公众号_Yi昭.png)
-
-安装用到的包
-
-    ppip install fastapi.serve-static
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-网络搜索和发送邮件的 tool 都跑通了。
-
-> 代码上传了课程仓库： https://github.com/QuarkGluonPlasma/ai-agent-course-code
-
-## 总结
-
-我们梳理了豆包、OpenClaw 定时任务的实现思路。
-
-创建了 FastAPI 后端项目，基于 LangChain + tool 实现了工具调用。
-
-在 service 里加上了 Agent Loop，并且用 stream 方法实现了流式，提供 sse 接口。
-
-然后我们把 tool 封装到 provider 实现了 tool 里调用 service。
-
-之后分别封装了邮件发送 tool、网络搜索 tool。
-
-综合测试了下，可以通过自然语言调用这些 tool。
-
-下篇我们继续来实现数据库增删改查的 tool、定时任务的 tool，然后实现完整定时任务机制。
+> **注意**：本篇（上）主要实现 Tool 功能和 AI 接口，定时任务调度功能在下篇实现。
 
 ---
 
-**公众号：** 神光的幸福生活 | **作者：** 神说要有光 | **发布时间：** 2026-03-13 12:46:05 | **文章地址：** http://mp.weixin.qq.com/s?__biz=MzYzNzI2MTI2Nw==&mid=2247485406&idx=1&sn=e97b50d911bbfb81cb4aaae10ab01b3f&chksm=f1b3a32e5b1ae960b74ccae3175f583bec57b383be309807e061636ccbc75a3de142d595fdb1&scene=27#wechat_redirect
+## 创建 FastAPI 项目
+
+```bash
+# 创建项目目录
+mkdir cron-job-tool
+cd cron-job-tool
+
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+
+# 安装依赖
+pip install fastapi uvicorn python-dotenv langchain langchain-openai pydantic
+```
+
+![创建项目](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/6_公众号_Yi昭.png)
+
+### 项目结构
+
+```
+cron-job-tool/
+├── .env                    # 环境变量配置
+├── main.py                 # 应用入口
+├── modules/
+│   ├── __init__.py
+│   ├── ai/
+│   │   ├── __init__.py
+│   │   ├── router.py       # AI 接口路由
+│   │   ├── service.py      # AI 业务逻辑
+│   │   ├── dependencies.py # 依赖注入
+│   │   └── tools.py        # Tool 定义
+│   └── user/
+│       ├── __init__.py
+│       ├── router.py       # 用户接口路由
+│       └── service.py      # 用户业务逻辑
+└── public/
+    └── ai-sse-test.html    # 前端测试页面
+```
+
+生成 AI 模块：
+
+```bash
+mkdir -p modules/ai modules/user public
+```
+
+![生成 AI 模块](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/7_公众号_Yi昭.png)
+
+### 配置文件
+
+创建 `.env`：
+
+```env
+# OpenAI API 配置
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+MODEL_NAME=qwen-plus
+
+# 邮件配置（可选）
+MAIL_HOST=smtp.qq.com
+MAIL_PORT=587
+MAIL_SECURE=false
+MAIL_USER=你的邮箱
+MAIL_PASS=你的授权码
+MAIL_FROM="No Reply <你的邮箱>"
+
+# 博查搜索 API（可选）
+BOCHA_API_KEY=sk-xxx
+```
+
+---
+
+## 实现 AI 功能（Tool + Agent Loop）
+
+### 定义 Tool
+
+创建 `modules/ai/tools.py`：
+
+```python
+"""
+AI Tools：工具定义
+"""
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+
+
+# ========== 查询用户 Tool ==========
+
+class QueryUserArgs(BaseModel):
+    """查询用户参数"""
+    user_id: str = Field(description="用户 ID，例如: 001, 002, 003")
+
+
+# Mock 数据库
+_database: Dict[str, Dict] = {
+    "users": {
+        "001": {"id": "001", "name": "张三", "email": "zhangsan@example.com", "role": "admin"},
+        "002": {"id": "002", "name": "李四", "email": "lisi@example.com", "role": "user"},
+        "003": {"id": "003", "name": "王五", "email": "wangwu@example.com", "role": "user"},
+    }
+}
+
+
+@tool(args_schema=QueryUserArgs)
+def query_user(user_id: str) -> str:
+    """
+    查询数据库中的用户信息。输入用户 ID，返回该用户的详细信息（姓名、邮箱、角色）。
+
+    Args:
+        user_id: 用户 ID
+
+    Returns:
+        str: 用户信息
+    """
+    user = _database["users"].get(user_id)
+    if not user:
+        available_ids = ", ".join(_database["users"].keys())
+        return f"用户 ID {user_id} 不存在。可用的 ID: {available_ids}"
+
+    return f"""用户信息：
+- ID: {user['id']}
+- 姓名: {user['name']}
+- 邮箱: {user['email']}
+- 角色: {user['role']}"""
+
+
+# Tool 列表
+basic_tools = [query_user]
+```
+
+![查询用户 Tool](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/10_公众号_Yi昭.png)
+
+### AI Service
+
+创建 `modules/ai/service.py`：
+
+```python
+"""
+AI Service：业务逻辑（Agent Loop）
+"""
+from typing import List, AsyncGenerator
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.tools import BaseTool
+
+
+class AIService:
+    """AI 服务"""
+
+    def __init__(self, model: ChatOpenAI, tools: List[BaseTool]):
+        """
+        初始化 AI 服务
+
+        Args:
+            model: 大语言模型
+            tools: 工具列表
+        """
+        # 绑定工具到模型
+        self.model_with_tools = model.bind_tools(tools)
+        self.tools = tools
+        # Tool 名称到 Tool 对象的映射
+        self.tool_map = {tool.name: tool for tool in tools}
+
+    async def run_chain(self, query: str) -> str:
+        """
+        同步调用 Chain（Agent Loop）
+
+        Args:
+            query: 用户问题
+
+        Returns:
+            str: AI 回答
+        """
+        messages: List[BaseMessage] = [
+            SystemMessage(
+                "你是一个智能助手，可以在需要时调用工具（如 query_user）来查询用户信息，再用结果回答用户的问题。"
+            ),
+            HumanMessage(query),
+        ]
+
+        while True:
+            # 调用大模型（思考）
+            ai_message = await self.model_with_tools.ainvoke(messages)
+            messages.append(ai_message)
+
+            tool_calls = ai_message.tool_calls or []
+
+            # 没有要调用的工具，直接把回答返回
+            if not tool_calls:
+                return ai_message.content
+
+            # 依次执行本轮需要调用的所有工具（行动）
+            for tool_call in tool_calls:
+                tool_call_id = tool_call.get("id", "")
+                tool_name = tool_call.get("name")
+
+                if tool_name in self.tool_map:
+                    tool = self.tool_map[tool_name]
+                    result = await tool.ainvoke(tool_call.get("args", {}))
+
+                    # 把工具结果加入消息（观察）
+                    messages.append(
+                        ToolMessage(
+                            tool_call_id=tool_call_id,
+                            name=tool_name,
+                            content=str(result),
+                        )
+                    )
+
+    async def run_chain_stream(self, query: str) -> AsyncGenerator[str, None]:
+        """
+        流式调用 Chain（Agent Loop）
+
+        Args:
+            query: 用户问题
+
+        Yields:
+            str: 流式返回的内容块
+        """
+        messages: List[BaseMessage] = [
+            SystemMessage(
+                "你是一个智能助手，可以在需要时调用工具（如 query_user）来查询用户信息，再用结果回答用户的问题。"
+            ),
+            HumanMessage(query),
+        ]
+
+        while True:
+            # 一轮对话：先让模型思考并（可能）提出工具调用
+            stream = self.model_with_tools.astream(messages)
+            full_ai_message: Optional[AIMessage] = None
+
+            async for chunk in stream:
+                # 使用 += 持续拼接，得到本轮完整的 AIMessage
+                full_ai_message = full_ai_message + chunk if full_ai_message else chunk
+
+                has_tool_call_chunk = (
+                    hasattr(full_ai_message, "tool_call_chunks")
+                    and full_ai_message.tool_call_chunks
+                    and len(full_ai_message.tool_call_chunks) > 0
+                )
+
+                # 只要当前轮次还没出现 tool 调用的 chunk，就可以把文本内容流式往外推
+                if not has_tool_call_chunk and chunk.content:
+                    yield chunk.content
+
+            if not full_ai_message:
+                return
+
+            messages.append(full_ai_message)
+            tool_calls = full_ai_message.tool_calls or []
+
+            # 没有工具调用：说明这一轮就是最终回答，已经在上面的 async for 中流完了，可以结束
+            if not tool_calls:
+                return
+
+            # 有工具调用：本轮我们不再额外输出内容，而是执行工具，生成 ToolMessage，进入下一轮
+            for tool_call in tool_calls:
+                tool_call_id = tool_call.get("id", "")
+                tool_name = tool_call.get("name")
+
+                if tool_name in self.tool_map:
+                    tool = self.tool_map[tool_name]
+                    result = await tool.ainvoke(tool_call.get("args", {}))
+
+                    messages.append(
+                        ToolMessage(
+                            tool_call_id=tool_call_id,
+                            name=tool_name,
+                            content=str(result),
+                        )
+                    )
+```
+
+![Agent Loop 实现](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/12_公众号_Yi昭.png)
+
+### 依赖注入
+
+创建 `modules/ai/dependencies.py`：
+
+```python
+"""
+AI 依赖注入
+"""
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from .tools import basic_tools
+
+load_dotenv()
+
+
+def get_chat_model() -> ChatOpenAI:
+    """创建 ChatModel 实例"""
+    return ChatOpenAI(
+        temperature=0.7,
+        model=os.getenv("MODEL_NAME", "qwen-plus"),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+    )
+
+
+def get_ai_service(model: ChatOpenAI = None) -> "AIService":
+    """
+    创建 AI Service 实例
+
+    Args:
+        model: 大语言模型实例（可选，不传则自动创建）
+
+    Returns:
+        AIService: AI 服务实例
+    """
+    from .service import AIService
+
+    if model is None:
+        model = get_chat_model()
+
+    return AIService(model=model, tools=basic_tools)
+```
+
+![ChatModel provider](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/9_公众号_Yi昭.png)
+
+### AI Router
+
+创建 `modules/ai/router.py`：
+
+```python
+"""
+AI Router：AI 接口路由
+"""
+import json
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from .service import AIService
+from .dependencies import get_ai_service
+
+router = APIRouter(prefix="/ai", tags=["AI 接口"])
+
+
+@router.get("/chat", summary="同步对话接口")
+async def chat(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service),
+):
+    """同步对话接口：等待完整回答后返回"""
+    answer = await service.run_chain(query)
+    return {"answer": answer}
+
+
+@router.get("/chat/stream", summary="流式对话接口（SSE）")
+async def chat_stream(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service),
+):
+    """流式对话接口：基于 SSE 实时返回内容"""
+
+    async def event_generator():
+        """SSE 事件生成器"""
+        try:
+            async for chunk in service.run_chain_stream(query):
+                # SSE 格式：data: 内容\n\n
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+
+            # 发送完成事件
+            yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+```
+
+### 应用入口
+
+创建 `main.py`：
+
+```python
+"""
+应用入口
+"""
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from modules.ai.router import router as ai_router
+
+app = FastAPI(title="Cron Job Tool Demo", version="1.0.0")
+
+# 注册路由
+app.include_router(ai_router)
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="public"), name="static")
+
+
+@app.get("/", summary="健康检查")
+async def root():
+    return {"message": "Cron Job Tool Demo is running!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+启动服务：
+
+```bash
+uvicorn main:app --reload
+```
+
+测试同步接口：
+
+```bash
+curl "http://localhost:8000/ai/chat?query=查询用户001的信息"
+```
+
+---
+
+## 流式版本（SSE）
+
+上面实现了同步版本，接下来实现流式版本。
+
+主要是流式的处理部分：
+
+![流式处理](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/13_公众号_Yi昭.png)
+
+这里 `stream` 返回的是一个个 chunk，我们判断如果没有 `tool_call_chunks` 代表不是工具调用，那就直接 yield 返回内容。否则，就进入下面的工具调用逻辑，那部分和之前一样，拼接结束之后就是完整的 `tool_calls` 了。
+
+流式接口已经在上面的 `router.py` 中实现了。
+
+测试流式接口：
+
+```bash
+curl -N "http://localhost:8000/ai/chat/stream?query=查询用户001的信息"
+```
+
+这样，我们就完成了 Tool + 流式 + SSE。
+
+---
+
+## Tool 里调用 Service
+
+但我们现在的 Tool 太简单了，能不能 Tool 里调用 Service 呢？比如 Tool 里面调用 Service 来做数据库增删改查？
+
+其实也很简单，和之前的 ChatModel 一样定义个 provider 就好了。
+
+### User Service
+
+创建 `modules/user/service.py`：
+
+```python
+"""
+User Service：用户业务逻辑（增删改查）
+"""
+from typing import List, Dict, Optional
+from pydantic import BaseModel
+
+
+class User(BaseModel):
+    """用户模型"""
+    id: str
+    name: str
+    email: str
+    role: str
+
+
+class UserService:
+    """用户服务"""
+
+    def __init__(self):
+        # Mock 数据库
+        self._users: Dict[str, User] = {
+            "001": User(id="001", name="赵云", email="zhaoyun@example.com", role="admin"),
+            "002": User(id="002", name="诸葛亮", email="zhugeliang@example.com", role="manager"),
+            "003": User(id="003", name="关羽", email="guanyu@example.com", role="user"),
+            "004": User(id="004", name="张飞", email="zhangfei@example.com", role="user"),
+            "005": User(id="005", name="刘备", email="liubei@example.com", role="owner"),
+            "006": User(id="006", name="黄忠", email="huangzhong@example.com", role="user"),
+        }
+
+    def find_all(self) -> List[User]:
+        """获取所有用户"""
+        return list(self._users.values())
+
+    def find_one(self, user_id: str) -> Optional[User]:
+        """根据 ID 获取用户"""
+        return self._users.get(user_id)
+
+    def create(self, user: User) -> User:
+        """创建用户"""
+        self._users[user.id] = user
+        return user
+
+    def update(self, user_id: str, partial: Dict) -> Optional[User]:
+        """更新用户"""
+        existing = self._users.get(user_id)
+        if not existing:
+            return None
+
+        updated_data = existing.model_dump()
+        updated_data.update(partial)
+        updated_data["id"] = existing.id  # ID 不可修改
+
+        updated_user = User(**updated_data)
+        self._users[user_id] = updated_user
+        return updated_user
+
+    def remove(self, user_id: str) -> bool:
+        """删除用户"""
+        return self._users.pop(user_id, None) is not None
+```
+
+这里面定义了 mock 的增删改查。
+
+### 改造 Query User Tool
+
+更新 `modules/ai/tools.py`，添加基于 Service 的 Tool：
+
+```python
+"""
+AI Tools：工具定义（基于 Service）
+"""
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+from modules.user.service import UserService
+
+
+# ========== 查询用户 Tool（基于 Service） ==========
+
+class QueryUserArgs(BaseModel):
+    """查询用户参数"""
+    user_id: str = Field(description="用户 ID，例如: 001, 002, 003")
+
+
+def create_query_user_tool(user_service: UserService):
+    """
+    创建查询用户 Tool（基于 UserService）
+
+    Args:
+        user_service: 用户服务实例
+
+    Returns:
+        Tool: 查询用户 Tool
+    """
+    @tool(args_schema=QueryUserArgs)
+    def query_user(user_id: str) -> str:
+        """
+        查询数据库中的用户信息。输入用户 ID，返回该用户的详细信息（姓名、邮箱、角色）。
+        """
+        user = user_service.find_one(user_id)
+        if not user:
+            available_ids = ", ".join([u.id for u in user_service.find_all()])
+            return f"用户 ID {user_id} 不存在。可用的 ID: {available_ids}"
+
+        return f"""用户信息：
+- ID: {user.id}
+- 姓名: {user.name}
+- 邮箱: {user.email}
+- 角色: {user.role}"""
+
+    return query_user
+```
+
+![User Service provider](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/14_公众号_Yi昭.png)
+
+唯一的区别就是现在的实现用注入的 `user_service` 来做，返回 Tool。
+
+### 改造依赖注入
+
+更新 `modules/ai/dependencies.py`：
+
+```python
+"""
+AI 依赖注入（基于 Service）
+"""
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from modules.user.service import UserService
+from .tools import create_query_user_tool
+
+load_dotenv()
+
+# 单例实例
+_user_service = UserService()
+_chat_model = None
+
+
+def get_user_service() -> UserService:
+    """获取 UserService 单例"""
+    return _user_service
+
+
+def get_chat_model() -> ChatOpenAI:
+    """创建 ChatModel 实例"""
+    global _chat_model
+    if _chat_model is None:
+        _chat_model = ChatOpenAI(
+            temperature=0.7,
+            model=os.getenv("MODEL_NAME", "qwen-plus"),
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL"),
+        )
+    return _chat_model
+
+
+def get_ai_service() -> "AIService":
+    """创建 AI Service 实例（注入 UserService）"""
+    from .service import AIService
+
+    user_service = get_user_service()
+    model = get_chat_model()
+
+    # 创建基于 Service 的 Tool
+    query_user_tool = create_query_user_tool(user_service)
+    tools = [query_user_tool]
+
+    return AIService(model=model, tools=tools)
+```
+
+![注入 Tool](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/15_公众号_Yi昭.png)
+
+这样我们就打通了 Tool 里调用 Service。
+
+那自然就可以实现数据库增删改查的 Tool、发送邮件的 Tool。
+
+---
+
+## 发送邮件的 Tool
+
+我们用 QQ 邮箱的 SMTP 服务发送邮件。
+
+拿到授权码之后，安装依赖：
+
+```bash
+pip install aiosmtplib
+```
+
+### 邮件 Tool
+
+更新 `modules/ai/tools.py`，添加邮件 Tool：
+
+```python
+"""
+AI Tools：邮件 Tool
+"""
+import os
+from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
+from langchain_core.tools import tool
+
+
+class SendMailArgs(BaseModel):
+    """发送邮件参数"""
+    to: EmailStr = Field(description="收件人邮箱地址，例如：someone@example.com")
+    subject: str = Field(description="邮件主题")
+    text: Optional[str] = Field(None, description="纯文本内容，可选")
+    html: Optional[str] = Field(None, description="HTML 内容，可选")
+
+
+def create_send_mail_tool():
+    """创建发送邮件 Tool"""
+
+    @tool(args_schema=SendMailArgs)
+    async def send_mail(to: str, subject: str, text: Optional[str] = None, html: Optional[str] = None) -> str:
+        """
+        发送电子邮件。需要提供收件人邮箱、主题，可选文本内容和 HTML 内容。
+        """
+        import aiosmtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        mail_host = os.getenv("MAIL_HOST", "smtp.qq.com")
+        mail_port = int(os.getenv("MAIL_PORT", "587"))
+        mail_secure = os.getenv("MAIL_SECURE", "false") == "true"
+        mail_user = os.getenv("MAIL_USER", "")
+        mail_pass = os.getenv("MAIL_PASS", "")
+        mail_from = os.getenv("MAIL_FROM", f"No Reply <{mail_user}>")
+
+        if not mail_user or not mail_pass:
+            return "邮件服务未配置（环境变量 MAIL_USER、MAIL_PASS），请先在服务端配置后再重试。"
+
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = mail_from
+            msg["To"] = to
+
+            if text:
+                msg.attach(MIMEText(text, "plain", "utf-8"))
+            if html:
+                msg.attach(MIMEText(html, "html", "utf-8"))
+            if not text and not html:
+                msg.attach(MIMEText("（无内容）", "plain", "utf-8"))
+
+            await aiosmtplib.send(
+                msg,
+                hostname=mail_host,
+                port=mail_port,
+                use_tls=mail_secure,
+                username=mail_user,
+                password=mail_pass,
+            )
+
+            return f"邮件已发送到 {to}，主题为「{subject}」"
+        except Exception as e:
+            return f"邮件发送失败：{str(e)}"
+
+    return send_mail
+```
+
+![邮件 Tool provider](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/19_公众号_Yi昭.png)
+
+### 注册邮件 Tool
+
+更新 `modules/ai/dependencies.py`，注册邮件 Tool：
+
+```python
+def get_ai_service() -> "AIService":
+    """创建 AI Service 实例（注入 UserService + 邮件 Tool）"""
+    from .service import AIService
+    from .tools import create_query_user_tool, create_send_mail_tool
+
+    user_service = get_user_service()
+    model = get_chat_model()
+
+    # 创建 Tool
+    query_user_tool = create_query_user_tool(user_service)
+    send_mail_tool = create_send_mail_tool()
+    tools = [query_user_tool, send_mail_tool]
+
+    return AIService(model=model, tools=tools)
+```
+
+![注入邮件 Tool](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/20_公众号_Yi昭.png)
+
+这样，我们就可以用自然语言调用这个工具了。
+
+测试：
+
+```bash
+curl "http://localhost:8000/ai/chat?query=给zhangsan@example.com发一封邮件，主题是测试，内容是这是一封测试邮件"
+```
+
+这样，邮件发送的 Tool 就跑通了。
+
+---
+
+## 网络搜索的 Tool
+
+用博查的 API：https://open.bochaai.com/
+
+![博查 API](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/23_公众号_Yi昭.png)
+
+DeepSeek 的搜索就是用的这个：
+
+![DeepSeek 搜索](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/24_公众号_Yi昭.png)
+
+挺靠谱的。
+
+### 网络搜索 Tool
+
+更新 `modules/ai/tools.py`，添加网络搜索 Tool：
+
+```python
+"""
+AI Tools：网络搜索 Tool
+"""
+import os
+import httpx
+from typing import Optional
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+
+
+class WebSearchArgs(BaseModel):
+    """网络搜索参数"""
+    query: str = Field(min_length=1, description="搜索关键词，例如：公司年报、某个事件等")
+    count: Optional[int] = Field(None, ge=1, le=20, description="返回的搜索结果数量，默认 10 条")
+
+
+def create_web_search_tool():
+    """创建网络搜索 Tool（基于博查 API）"""
+
+    @tool(args_schema=WebSearchArgs)
+    async def web_search(query: str, count: Optional[int] = None) -> str:
+        """
+        使用 Bocha Web Search API 搜索互联网网页。输入为搜索关键词（可选 count 指定结果数量），
+        返回包含标题、URL、摘要、网站名称、图标和时间等信息的结果列表。
+        """
+        api_key = os.getenv("BOCHA_API_KEY")
+        if not api_key:
+            return "Bocha Web Search 的 API Key 未配置（环境变量 BOCHA_API_KEY），请先在服务端配置后再重试。"
+
+        url = "https://api.bochaai.com/v1/web-search"
+        body = {
+            "query": query,
+            "freshness": "noLimit",
+            "summary": True,
+            "count": count or 10,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=body,
+                )
+
+                if response.status_code != 200:
+                    return f"搜索 API 请求失败，状态码: {response.status_code}, 错误信息: {response.text}"
+
+                data = response.json()
+
+                if data.get("code") != 200 or not data.get("data"):
+                    return f"搜索 API 请求失败，原因是: {data.get('msg', '未知错误')}"
+
+                webpages = data.get("data", {}).get("webPages", {}).get("value", [])
+                if not webpages:
+                    return "未找到相关结果。"
+
+                formatted = "\n\n".join([
+                    f"""引用: {idx + 1}
+标题: {page.get('name', '')}
+URL: {page.get('url', '')}
+摘要: {page.get('summary', '')}
+网站名称: {page.get('siteName', '')}
+发布时间: {page.get('dateLastCrawled', '')}"""
+                    for idx, page in enumerate(webpages)
+                ])
+
+                return formatted
+
+        except Exception as e:
+            return f"搜索 API 请求失败，原因是：{str(e)}"
+
+    return web_search
+```
+
+### 注册网络搜索 Tool
+
+更新 `modules/ai/dependencies.py`，注册网络搜索 Tool：
+
+```python
+def get_ai_service() -> "AIService":
+    """创建 AI Service 实例（注入所有 Tool）"""
+    from .service import AIService
+    from .tools import create_query_user_tool, create_send_mail_tool, create_web_search_tool
+
+    user_service = get_user_service()
+    model = get_chat_model()
+
+    # 创建 Tool
+    query_user_tool = create_query_user_tool(user_service)
+    send_mail_tool = create_send_mail_tool()
+    web_search_tool = create_web_search_tool()
+    tools = [query_user_tool, send_mail_tool, web_search_tool]
+
+    return AIService(model=model, tools=tools)
+```
+
+![注册网络搜索 Tool](../IMG/2026-03-13_Nesttool实现OpenClaw同款定时任务功能（上）/25_公众号_Yi昭.png)
+
+然后来测一下。当然，SSE 还是用界面测更好，我们加一个 HTML。
+
+### 前端测试页面
+
+创建 `public/ai-sse-test.html`：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI SSE Chat 测试</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            padding: 24px 16px;
+        }
+        .shell { width: 100%; max-width: 720px; }
+        h1 { font-size: 20px; margin: 0 0 12px; }
+        .card {
+            background: #ffffff;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+            padding: 16px 18px 18px;
+        }
+        label { display: block; font-size: 13px; margin-bottom: 6px; color: #6b7280; }
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            resize: vertical;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+        textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3); }
+        .controls { display: flex; align-items: center; margin-top: 10px; gap: 10px; }
+        button {
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid #2563eb;
+            background: #3b82f6;
+            color: #ffffff;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        button:disabled { opacity: 0.7; cursor: not-allowed; }
+        .status { font-size: 12px; color: #6b7280; }
+        .output {
+            margin-top: 16px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #111827;
+            color: #e5e7eb;
+            font-family: ui-monospace, monospace;
+            white-space: pre-wrap;
+            max-height: 360px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="card">
+            <h1>AI SSE Chat 测试</h1>
+            <label for="query">输入你的问题：</label>
+            <textarea id="query" placeholder="请输入要发送给 AI 的问题..."></textarea>
+            <div class="controls">
+                <button id="sendBtn">开始对话（SSE）</button>
+                <div class="status" id="status">状态：待机</div>
+            </div>
+            <div class="output" id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        const sendBtn = document.getElementById('sendBtn');
+        const queryInput = document.getElementById('query');
+        const outputEl = document.getElementById('output');
+        const statusEl = document.getElementById('status');
+        let es = null;
+
+        function closeEventSource() {
+            if (es) { es.close(); es = null; }
+            sendBtn.disabled = false;
+        }
+
+        sendBtn.onclick = () => {
+            const query = queryInput.value.trim();
+            if (!query) { alert('请输入问题'); return; }
+
+            closeEventSource();
+            outputEl.textContent = '';
+            sendBtn.disabled = true;
+            statusEl.textContent = '状态：连接中…';
+
+            const url = `/ai/chat/stream?query=${encodeURIComponent(query)}`;
+            es = new EventSource(url);
+
+            es.onopen = () => { statusEl.textContent = '状态：已连接，流式接收中…'; };
+
+            es.onmessage = (event) => {
+                try {
+                    const parsed = JSON.parse(event.data);
+                    if (parsed.content) outputEl.textContent += parsed.content;
+                    if (parsed.done) { closeEventSource(); statusEl.textContent = '状态：完成'; }
+                } catch (e) {
+                    outputEl.textContent += event.data;
+                }
+            };
+
+            es.onerror = () => { closeEventSource(); statusEl.textContent = '状态：连接已结束'; };
+        };
+    </script>
+</body>
+</html>
+```
+
+访问 http://localhost:8000/static/ai-sse-test.html
+
+这样，网络搜索的 Tool 也跑通了。
+
+---
+
+## 学习要点
+
+1. **定时任务是 Agent 常见功能**：OpenClaw、Nanobot 等都有实现，核心是到时间启动 Agent Loop
+2. **Agent Loop**：用 `while True` 循环，直到没有 Tool Call 就返回，否则调用 Tool，结果通过 ToolMessage 加入消息
+3. **流式处理**：判断 `tool_call_chunks` 是否出现，没出现就直接 yield 文本内容，出现了就进入工具调用逻辑
+4. **Tool 里调用 Service**：通过工厂函数创建 Tool，注入 Service 依赖，实现 Tool 和业务逻辑的解耦
+5. **依赖注入**：FastAPI 通过 `Depends()` 实现依赖注入，单例 Service 可以全局复用
+6. **邮件 Tool**：用 `aiosmtplib` 异步发送邮件，支持 SMTP 服务（如 QQ 邮箱）
+7. **网络搜索 Tool**：用博查 API（DeepSeek 同款）实现网络搜索，返回格式化的搜索结果
+8. **SSE 前端**：用 `EventSource` 监听 SSE 的 `message` 事件，实时显示流式内容
+9. **本篇（上）**主要实现 Tool 功能和 AI 接口，**定时任务调度功能**在下篇实现
+
+## 扩展方向
+
+- 下篇实现定时任务调度器（APScheduler / Celery）
+- 实现心跳机制（定期主动执行任务）
+- 添加更多 Tool（文件操作、数据库操作、API 调用等）
+- 实现 Tool 的权限控制和审计日志
+- 探索 LangGraph 实现更复杂的 Agent 流程
+- 实现任务管理界面（查看、编辑、删除定时任务）
+
+---
+
+## 配套代码库
+
+**代码库地址**：https://github.com/iiixiyan/agent-learning-code/tree/main/02-enterprise-backend/21-cron-job-tool-part1
+
+包含本文的完整可运行代码示例（FastAPI + Tool + Agent Loop + SSE + 邮件/搜索 Tool）。
+
+---
+
+**上一篇**：[FastAPI + LangChain 实现 SSE 流式接口](./20_FastAPI+LangChain实现SSE流式接口.md) | **下一篇**：[FastAPI + Tool 实现定时任务（下）](./22_FastAPI+tool实现定时任务(下).md)
