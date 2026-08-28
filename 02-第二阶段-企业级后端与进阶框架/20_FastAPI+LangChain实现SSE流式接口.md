@@ -1,269 +1,805 @@
-# Nest + LangChain 实现基于 SSE 的流式 ai 接口
+# FastAPI + LangChain 实现基于 SSE 的流式 AI 接口
 
-> **Python 版** | 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 技术栈
+> **Python 版** | 基于 FastAPI + LangChain Python 技术栈
+> 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 版本
 
 ---
 
-神光的幸福生活 2026年3月8日 19:18
+## 为什么需要后端服务？
 
 前面学了 LangChain 的各种功能，但都是在 Python 脚本里跑的，而实际上大多数 Agent 都是跑在后端服务里。
 
 比如你和豆包聊天的时候，它会调用 AI 接口，把你的问题传给后端，后端流式返回生成的回答。
 
-这节我们就来学一下 LangChain 和后端框架结合，开发 ai 接口。
+这节我们就来学一下 LangChain 和后端框架结合，开发 AI 接口。
 
-我们用 FastAPI 这个后端框架，它是 Python + Python 的最主流的框架：
+我们用 **FastAPI** 这个后端框架，它是 Python 生态最主流的高性能 Web 框架：
 
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/0_公众号_Yi昭.png)
+![FastAPI 框架](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/0_公众号_Yi昭.png)
 
-底层是 Express，封装后提供了 MVC、DI（依赖注入）等架构特性。
-
-我们创建个项目：
-
-    pip install -g fastapi.clinest new hello-nest-langchain
-
-> 🎬 视频演示（原公众号视频）
-
-进入项目目录看一下：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/1_公众号_Yi昭.png)
-
-它是 MVC 架构：
-
-在 router 里面写路由，比如 /list 的 get 接口，/create 的 post 接口。
-
-在 service 里写具体的业务逻辑，比如增删改查、调用第三方服务等
-
-然后这些都是以 module 的形式组织，一个 module 里有 router、service 等
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/2_公众号_Yi昭.png)
-
-@Module 声明模块，里面 routers 数组里放本模块的 Router，providers 数组里是本模块的 service 等，imports 是引用的其他模块。
-
-我们创建一个 crud 的模块：
-
-    nest g res book --no-spec
-
-> 🎬 视频演示（原公众号视频）
-
-从根模块 AppModule 引入 BookModule：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/3_公众号_Yi昭.png)
-
-这样 BookRouter 里的路由就会生效了。
-
-FastAPI 还支持 DI（Dependency Injection） 依赖注入
-
-也就是你不用手动 new 依赖对象，只要声明下，运行的时候会自动注入依赖的实例对象。
-
-比如这里用 @Injectable 声明了 BookService
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/4_公众号_Yi昭.png)
-
-然后 BookRouter 里在构造器声明了依赖：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/5_公众号_Yi昭.png)
-
-这样运行的时候就会自动注入 BookService 的实例对象。
-
-这样一个好处是所有的依赖都是单例的，不用自己去 new。
-
-这也是为啥叫 providers：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/6_公众号_Yi昭.png)
-
-就是可以提供某种能力的对象。
-
-用 @Injectable 声明的 class 只是一种，你也可以这样创建 provider：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/7_公众号_Yi昭.png)
-
-用 useFactory 函数返回一个对象，它也可以作为 provider 来用，provide 是名字
-
-    import&nbsp;{ Module }&nbsp;from'fastapi.common';import&nbsp;{ BookService }&nbsp;from'./book.service';import&nbsp;{ BookRouter }&nbsp;from'./book.router';@Module({routers: [BookRouter],providers: [&nbsp; &nbsp; BookService,&nbsp; &nbsp; {&nbsp; &nbsp; &nbsp;&nbsp;provide:&nbsp;'BOOK_REPOSITORY',&nbsp; &nbsp; &nbsp; useFactory() {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;// 内存 mock 仓库，适合测试，无需外部依赖&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;books: {&nbsp;id: number; title: string }[] = [&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; {&nbsp;id:&nbsp;1,&nbsp;title:&nbsp;'Book 1'&nbsp;},&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; {&nbsp;id:&nbsp;2,&nbsp;title:&nbsp;'Book 2'&nbsp;},&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; {&nbsp;id:&nbsp;3,&nbsp;title:&nbsp;'Book 3'&nbsp;},&nbsp; &nbsp; &nbsp; &nbsp; ];&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;findAll:&nbsp;()&nbsp;=&gt;&nbsp;[...books]&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; },&nbsp; ],})exportclass&nbsp;BookModule&nbsp;{}
-
-你可以基于这个依赖名字来注入：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/8_公众号_Yi昭.png)
-
-这里用到了属性注入的方式，之前是构造器参数的注入，两种都可以。
-
-    @Inject('BOOK_REPOSITORY')private readonly bookRepository: any;
-
-访问 http://localhost:3000/book
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/9_公众号_Yi昭.png)
-
-可以看到用 useFactory 创建的 provider 也被成功注入了。
-
-大概理解了 FastAPI 的模块、依赖注入之后，我们就可以来结合 LangChain 写 ai 接口了。
-
-安装下：
-
-    ppip install langchain_core langchain_openai
-
-生成一个 ai 的模块：
-
-    nest g res ai --no-spec
-
-> 🎬 视频演示（原公众号视频）
-
-然后在 AiService 里调用 langchain 创建一个 chain：
-
-    import&nbsp;{ Injectable }&nbsp;from'fastapi.common';import&nbsp;{ ChatOpenAI }&nbsp;from'langchain_openai';import&nbsp;{ PromptTemplate }&nbsp;from'langchain_core/prompts';import&nbsp;type { Runnable }&nbsp;from'langchain_core/runnables';import&nbsp;{ StringOutputParser }&nbsp;from'langchain_core/output_parsers';@Injectable()exportclass&nbsp;AiService&nbsp;{&nbsp; private readonly chain: Runnable;constructor() {&nbsp; &nbsp;&nbsp;const&nbsp;prompt = PromptTemplate.fromTemplate(&nbsp; &nbsp; &nbsp;&nbsp;'请回答以下问题：\n\n{query}',&nbsp; &nbsp; );&nbsp; &nbsp;&nbsp;const&nbsp;model =&nbsp;new&nbsp;ChatOpenAI({&nbsp; &nbsp; &nbsp;&nbsp;temperature:&nbsp;0.7,&nbsp; &nbsp; &nbsp;&nbsp;modelName:&nbsp;'qwen-plus',&nbsp; &nbsp; &nbsp;&nbsp;apiKey:&nbsp;'sk-xxx',&nbsp; &nbsp; &nbsp;&nbsp;configuration: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;baseURL:&nbsp;'https://dashscope.aliyuncs.com/compatible-mode/v1'&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; });&nbsp; &nbsp;&nbsp;this.chain = prompt.pipe(model).pipe(new&nbsp;StringOutputParser());&nbsp; }async&nbsp;runChain(query: string):&nbsp;Promise&lt;string&gt; {&nbsp; &nbsp;&nbsp;returnthis.chain.invoke({ query });&nbsp; }}
-
-在构造器里创建 ChatModel、chain 避免重复创建。（这里 apikey 之类的先写在代码里，后面优化）
-
-runChain 方法基于传入的参数调用 chain
-
-然后在 AiRouter 里加一个路由：
-
-    import&nbsp;{ Router, Get, Query }&nbsp;from'fastapi.common';import&nbsp;{ AiService }&nbsp;from'./ai.service';@Router('ai')exportclass&nbsp;AiRouter&nbsp;{constructor(private readonly aiService: AiService) {}&nbsp; @Get('chat')async&nbsp;chat(@Query('query') query: string) {&nbsp; &nbsp;&nbsp;const&nbsp;answer =&nbsp;awaitthis.aiService.runChain(query);&nbsp; &nbsp;&nbsp;return&nbsp;{ answer };&nbsp; }}
-
-接收 query 参数，调用大模型来回答问题。
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-这样，第一个 ai 接口就完成了。
-
-但现在有两个问题：
-
-- 配置没有抽离
-- 没有流式返回内容
-
-配置的话用这个包：
-
-    ppip install fastapi.config
-
-在 AppModule 里引入 ConfigModule：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/10_公众号_Yi昭.png)
-
-它的作用就是读取 .env 配置文件，提供一个 service 来读配置。
-
-isGlobal 设置为 true 就是全局模块，也就是不用 imports 就可以注入里面的 provider
-
-这样我们就可以根目录创建一个 .env 文件，和之前一样：
-
-    OPENAI_API_KEY=sk-xxxOPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1MODEL_NAME=qwen-plus
-
-现在配置就可以用 ConfigService 动态读取了：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/11_公众号_Yi昭.png)
-
-这里只能用构造器注入，这时候还没创建对象，没法用属性注入
-
-接下来实现流式返回，这种不断返回内容一般用 SSE（server-sent event） 来做
-
-sse 是这样的流程：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/12_公众号_Yi昭.png)
-
-服务端返回的 Content-Type 是 text/event-stream，这是一个流，可以多次返回内容。
-
-在 AiService 里加一个流式的接口：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/13_公众号_Yi昭.png)
-
-调用 chain 的 stream 方法，流式返回内容。
-
-这里用到了 js 的生成器语法，也就是方法名那里标个\*，然后 yield 不断异步返回内容。
-
-你没用过这个语法也没关系，理解意思就行，过一遍就会了。
-
-    async&nbsp;*streamChain(query: string): AsyncGenerator&lt;string&gt; {&nbsp;&nbsp;const&nbsp;stream =&nbsp;await&nbsp;this.chain.stream({ query });&nbsp;&nbsp;for&nbsp;await&nbsp;(const&nbsp;chunk&nbsp;of&nbsp;stream) {&nbsp; &nbsp;&nbsp;yield&nbsp;chunk;&nbsp; }}
-
-然后在 AiRouter 里调用下这个方法，加一个 chat/stream 接口：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/14_公众号_Yi昭.png)
-
-声明接口是 sse 的，然后创建一个 Observable，从 service 的返回流里读取内容，用 map 转成有 data 属性的对象
-
-这个是 rxjs 的写法，FastAPI 用 rxjs 来处理异步流。
-
-其实和 LCEL 的声明式写法思路一样，就是声明对这个流做什么处理
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-可以看到，通过 sse 的接口就可以流式的返回内容了。
-
-我们写一下前端代码，有的同学可能不知道 sse 的接口怎么调用；
-
-创建 public/sse-test.html
-
-    &lt;!DOCTYPE&nbsp;html&gt;&lt;html&nbsp;lang="zh-CN"&gt;&lt;head&gt;&nbsp; &nbsp;&nbsp;&lt;meta&nbsp;charset="UTF-8"&nbsp;/&gt;&nbsp; &nbsp;&nbsp;&lt;meta&nbsp;name="viewport"&nbsp;content="width=device-width, initial-scale=1.0"&nbsp;/&gt;&nbsp; &nbsp;&nbsp;&lt;title&gt;SSE 流式接口测试&lt;/title&gt;&nbsp; &nbsp;&nbsp;&lt;style&gt;&nbsp; &nbsp; &nbsp; * {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;box-sizing: border-box;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;body&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-family: system-ui, -apple-system, sans-serif;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;max-width:&nbsp;640px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin:&nbsp;2rem&nbsp;auto;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;01rem;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;label&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;display: block;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-bottom:&nbsp;0.5rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-weight:&nbsp;500;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;input[type="text"]&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;width:&nbsp;100%;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;0.75rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border:&nbsp;1px&nbsp;solid&nbsp;#ccc;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;6px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;1rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-bottom:&nbsp;1rem;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;button&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;0.6rem1.2rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;1rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border: none;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;6px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;cursor: pointer;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;button.primary&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#2563eb;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color: white;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;button.primary:hover&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#1d4ed8;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;button:disabled&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;opacity:&nbsp;0.6;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;cursor: not-allowed;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.output&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-top:&nbsp;1.5rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;padding:&nbsp;1rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border:&nbsp;1px&nbsp;solid&nbsp;#e5e7eb;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;border-radius:&nbsp;8px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;background:&nbsp;#f9fafb;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;min-height:&nbsp;120px;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;white-space: pre-wrap;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;word-break: break-word;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.output:empty::before&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;content:&nbsp;"回复将显示在这里...";&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#9ca3af;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp;&nbsp;.status&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;margin-top:&nbsp;0.5rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;font-size:&nbsp;0.875rem;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;color:&nbsp;#6b7280;&nbsp; &nbsp; &nbsp; }&nbsp; &nbsp;&nbsp;&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&nbsp; &nbsp;&nbsp;&lt;h1&gt;SSE 流式接口测试&lt;/h1&gt;&nbsp; &nbsp;&nbsp;&lt;label&nbsp;for="apiUrl"&gt;API 地址&lt;/label&gt;&nbsp; &nbsp;&nbsp;&lt;input&nbsp; &nbsp; &nbsp;&nbsp;type="text"&nbsp; &nbsp; &nbsp;&nbsp;id="apiUrl"&nbsp; &nbsp; &nbsp;&nbsp;value="http://localhost:3000"&nbsp; &nbsp; &nbsp;&nbsp;placeholder="http://localhost:3000"&nbsp; &nbsp; /&gt;&nbsp; &nbsp;&nbsp;&lt;label&nbsp;for="query"&gt;问题&lt;/label&gt;&nbsp; &nbsp;&nbsp;&lt;input&nbsp; &nbsp; &nbsp;&nbsp;type="text"&nbsp; &nbsp; &nbsp;&nbsp;id="query"&nbsp; &nbsp; &nbsp;&nbsp;placeholder="例如：什么是 LangChain？"&nbsp; &nbsp; &nbsp;&nbsp;value="什么是 LangChain？"&nbsp; &nbsp; /&gt;&nbsp; &nbsp;&nbsp;&lt;button&nbsp;type="button"&nbsp;id="btn"&nbsp;class="primary"&gt;开始流式请求&lt;/button&gt;&nbsp; &nbsp;&nbsp;&lt;p&nbsp;class="status"&nbsp;id="status"&gt;&lt;/p&gt;&nbsp; &nbsp;&nbsp;&lt;div&nbsp;class="output"&nbsp;id="output"&gt;&lt;/div&gt;&nbsp; &nbsp;&nbsp;&lt;script&gt;&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;apiUrlInput =&nbsp;document.getElementById("apiUrl");&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;queryInput =&nbsp;document.getElementById("query");&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;btn =&nbsp;document.getElementById("btn");&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;output =&nbsp;document.getElementById("output");&nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;status =&nbsp;document.getElementById("status");&nbsp; &nbsp; &nbsp; btn.addEventListener("click", () =&gt; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;baseUrl = apiUrlInput.value.replace(/\/$/,&nbsp;"");&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;q = queryInput.value.trim();&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!q) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; status.textContent =&nbsp;"请输入问题";&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;url =&nbsp;`${baseUrl}/ai/chat/stream?query=${encodeURIComponent(q)}`;&nbsp; &nbsp; &nbsp; &nbsp; output.textContent =&nbsp;"";&nbsp; &nbsp; &nbsp; &nbsp; btn.disabled =&nbsp;true;&nbsp; &nbsp; &nbsp; &nbsp; status.textContent =&nbsp;"连接中...";&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;eventSource =&nbsp;new&nbsp;EventSource(url);&nbsp; &nbsp; &nbsp; &nbsp; eventSource.onmessage =&nbsp;({ data }) =&gt;&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; output.textContent += data;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; status.textContent =&nbsp;"接收中...";&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; &nbsp; eventSource.onerror =&nbsp;()&nbsp;=&gt;&nbsp;{&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; eventSource.close();&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; btn.disabled =&nbsp;false;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; status.textContent =&nbsp;"连接已结束";&nbsp; &nbsp; &nbsp; &nbsp; };&nbsp; &nbsp; &nbsp; &nbsp; eventSource.addEventListener("done", () =&gt; {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; eventSource.close();&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; btn.disabled =&nbsp;false;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; status.textContent =&nbsp;"完成";&nbsp; &nbsp; &nbsp; &nbsp; });&nbsp; &nbsp; &nbsp; });&nbsp; &nbsp;&nbsp;&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
-
-样式是让 ai 写的，不用管，只看这部分：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/15_公众号_Yi昭.png)
-
-就是调用 EventSource 的 api，在 onmessage 回调里接收 data 就可以了。
-
-我们让 nest 服务支持静态 html 文件访问：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/16_公众号_Yi昭.png)
-
-安装下用到的包：
-
-    ppip install fastapi.serve-static
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-这就是 sse 流式返回内容的体验，ai 接口基本都用这种方式来做流式功能。
-
-然后回过头来优化下代码：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/17_公众号_Yi昭.png)
-
-现在这样写是 service 和具体的 ChatModel 耦合了，实际上应该拆分出去，动态注入。
-
-我们用刚学的 useFactory 的方式创建：
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/18_公众号_Yi昭.png)
-
-用 useFactory 的方式创建 ChatModel 的 provider
-
-![image](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/19_公众号_Yi昭.png)
-
-service 里直接注入。
-
-这样就实现了 ChatModel 和业务逻辑的解耦，可以动态切换。
-
-> 🎬 视频演示（原公众号视频）
-
-> 代码上传了课程仓库： https://github.com/QuarkGluonPlasma/ai-agent-course-code
-
-## 总结
-
-这节我们学了 FastAPI + LangChain 来开发 ai 接口。
-
-FastAPI 是一个 Python 生态最主流的后端开发框架，提供了 MVC、DI 等特性。
-
-- 通过 module 来拆分代码，每个 module 包含 service、router 等。
-- 实现了 DI 依赖注入，通过 @Injectable 声明的 Service，通过 useFactory 创建的对象，都可以作为 provider 来注入。
-
-注入方式包含构造器注入，也就是声明在参数里，以及属性注入，也就是 @Inject 的方式注入
-
-我们基于 LangChain 写了几个 ai 接口：
-
-ChatModel 用 useFactory 创建 provider 来注入。
-
-chain 定义在构造器里，避免重复创建。
-
-同步和流式分别调用 invoke 和 stream 方法。
-
-在 service 里用生成器语法异步返回内容，然后在 router 创建了一个 sse 的接口，用 rxjs 的 Observable 返回流式数据。
-
-前端代码用 EventSource 来监听 sse 的 message 事件，拿到流式返回的数据。
-
-SSE 在 ai 接口流式返回内容方面是最常用的方式，后面会经常用到。
+FastAPI 基于 Starlette 和 Pydantic，提供了高性能、自动文档、类型提示等特性。
 
 ---
 
-**公众号：** 神光的幸福生活 | **作者：** 神说要有光 | **发布时间：** 2026-03-08 19:18:20 | **文章地址：** http://mp.weixin.qq.com/s?__biz=MzYzNzI2MTI2Nw==&mid=2247485217&idx=1&sn=b87de63fd976248092995166916b3a33&chksm=f18415ebc1b0edfe50a347a3442d186f421b3539a0e7b056b83cc135eb38977dc3ea096391d4&scene=27#wechat_redirect
+## FastAPI 基础
+
+### 创建项目
+
+```bash
+# 创建项目目录
+mkdir fastapi-langchain-demo
+cd fastapi-langchain-demo
+
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate  # Windows
+
+# 安装依赖
+pip install fastapi uvicorn python-dotenv langchain langchain-openai
+```
+
+### 项目结构
+
+```
+fastapi-langchain-demo/
+├── .env                    # 环境变量配置
+├── main.py                 # 应用入口
+├── modules/
+│   ├── __init__.py
+│   ├── book/
+│   │   ├── __init__.py
+│   │   ├── router.py       # 路由（类似 Nest 的 Controller）
+│   │   └── service.py      # 业务逻辑（类似 Nest 的 Service）
+│   └── ai/
+│       ├── __init__.py
+│       ├── router.py       # AI 接口路由
+│       └── service.py      # AI 业务逻辑
+└── public/
+    └── sse-test.html       # 前端测试页面
+```
+
+FastAPI 是 MVC 架构：
+- **Router**：定义路由接口（GET/POST 等）
+- **Service**：写具体的业务逻辑
+- **Module**：组织 Router 和 Service（FastAPI 通过 APIRouter 包含来实现）
+
+![MVC 架构](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/2_公众号_Yi昭.png)
+
+### 依赖注入（DI）
+
+FastAPI 支持依赖注入（Dependency Injection），通过 `Depends()` 实现。
+
+创建 `modules/book/service.py`：
+
+```python
+"""
+Book Service：业务逻辑
+"""
+from typing import List, Dict
+
+# 内存 mock 仓库，适合测试，无需外部依赖
+_books: List[Dict] = [
+    {"id": 1, "title": "Book 1"},
+    {"id": 2, "title": "Book 2"},
+    {"id": 3, "title": "Book 3"},
+]
+
+
+class BookService:
+    """书籍服务"""
+
+    def find_all(self) -> List[Dict]:
+        """获取所有书籍"""
+        return [..._books]
+
+    def find_by_id(self, book_id: int) -> Dict:
+        """根据 ID 获取书籍"""
+        return next((b for b in _books if b["id"] == book_id), None)
+```
+
+创建 `modules/book/router.py`：
+
+```python
+"""
+Book Router：路由接口
+"""
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Dict
+from .service import BookService
+
+router = APIRouter(prefix="/book", tags=["书籍管理"])
+
+
+# 依赖注入：FastAPI 会自动创建 BookService 实例并注入
+def get_book_service() -> BookService:
+    return BookService()
+
+
+@router.get("", summary="获取所有书籍")
+async def get_books(
+    service: BookService = Depends(get_book_service)
+) -> List[Dict]:
+    """获取所有书籍列表"""
+    return service.find_all()
+
+
+@router.get("/{book_id}", summary="根据 ID 获取书籍")
+async def get_book(
+    book_id: int,
+    service: BookService = Depends(get_book_service)
+) -> Dict:
+    """根据 ID 获取书籍详情"""
+    book = service.find_by_id(book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="书籍不存在")
+    return book
+```
+
+创建 `main.py`：
+
+```python
+"""
+应用入口
+"""
+from fastapi import FastAPI
+from modules.book.router import router as book_router
+
+app = FastAPI(title="FastAPI + LangChain Demo", version="1.0.0")
+
+# 注册路由（类似 Nest 的 Module 引入）
+app.include_router(book_router)
+
+
+@app.get("/", summary="健康检查")
+async def root():
+    return {"message": "FastAPI + LangChain Demo is running!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+启动服务：
+
+```bash
+uvicorn main:app --reload
+```
+
+访问 http://localhost:8000/book
+
+![Book 接口测试](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/9_公众号_Yi昭.png)
+
+可以看到接口正常返回数据。
+
+### FastAPI 自动文档
+
+FastAPI 自动生成 Swagger 文档，访问：
+- Swagger UI：http://localhost:8000/docs
+- ReDoc：http://localhost:8000/redoc
+
+---
+
+## 结合 LangChain 写 AI 接口
+
+### 安装 LangChain 依赖
+
+```bash
+pip install langchain langchain-openai python-dotenv
+```
+
+### 配置文件
+
+创建 `.env`：
+
+```env
+# OpenAI API 配置（以通义千问为例）
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+MODEL_NAME=qwen-plus
+```
+
+### AI Service
+
+创建 `modules/ai/service.py`：
+
+```python
+"""
+AI Service：LangChain 业务逻辑
+"""
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import Runnable
+
+load_dotenv()
+
+
+class AIService:
+    """AI 服务"""
+
+    def __init__(self):
+        # 在构造器里创建 ChatModel 和 chain，避免重复创建
+        prompt = PromptTemplate.from_template(
+            "请回答以下问题：\n\n{query}"
+        )
+
+        model = ChatOpenAI(
+            temperature=0.7,
+            model=os.getenv("MODEL_NAME", "qwen-plus"),
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL"),
+        )
+
+        # LCEL 组装 Chain：prompt → model → parser
+        self.chain: Runnable = prompt | model | StrOutputParser()
+
+    async def run_chain(self, query: str) -> str:
+        """
+        同步调用 Chain
+
+        Args:
+            query: 用户问题
+
+        Returns:
+            str: AI 回答
+        """
+        return await self.chain.ainvoke({"query": query})
+
+    async def stream_chain(self, query: str):
+        """
+        流式调用 Chain（生成器）
+
+        Args:
+            query: 用户问题
+
+        Yields:
+            str: 流式返回的内容块
+        """
+        async for chunk in self.chain.astream({"query": query}):
+            yield chunk
+```
+
+### AI Router
+
+创建 `modules/ai/router.py`：
+
+```python
+"""
+AI Router：AI 接口路由
+"""
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from .service import AIService
+
+router = APIRouter(prefix="/ai", tags=["AI 接口"])
+
+
+def get_ai_service() -> AIService:
+    return AIService()
+
+
+@router.get("/chat", summary="同步对话接口")
+async def chat(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service)
+):
+    """
+    同步对话接口：等待完整回答后返回
+
+    - **query**: 用户问题
+    """
+    answer = await service.run_chain(query)
+    return {"answer": answer}
+```
+
+### 注册路由
+
+更新 `main.py`：
+
+```python
+"""
+应用入口
+"""
+from fastapi import FastAPI
+from modules.book.router import router as book_router
+from modules.ai.router import router as ai_router
+
+app = FastAPI(title="FastAPI + LangChain Demo", version="1.0.0")
+
+# 注册路由
+app.include_router(book_router)
+app.include_router(ai_router)
+
+
+@app.get("/", summary="健康检查")
+async def root():
+    return {"message": "FastAPI + LangChain Demo is running!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+启动服务：
+
+```bash
+uvicorn main:app --reload
+```
+
+测试同步接口：
+
+```bash
+curl "http://localhost:8000/ai/chat?query=什么是LangChain"
+```
+
+这样，第一个 AI 接口就完成了。
+
+但现在有两个问题：
+- 配置没有抽离（已用 .env 解决）
+- 没有流式返回内容
+
+接下来实现流式返回。
+
+---
+
+## SSE 流式返回
+
+这种不断返回内容一般用 **SSE（Server-Sent Events）** 来做。
+
+SSE 是这样的流程：
+
+![SSE 流程](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/12_公众号_Yi昭.png)
+
+服务端返回的 `Content-Type` 是 `text/event-stream`，这是一个流，可以多次返回内容。
+
+### 流式接口实现
+
+更新 `modules/ai/router.py`，添加流式接口：
+
+```python
+"""
+AI Router：AI 接口路由
+"""
+import json
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from .service import AIService
+
+router = APIRouter(prefix="/ai", tags=["AI 接口"])
+
+
+def get_ai_service() -> AIService:
+    return AIService()
+
+
+@router.get("/chat", summary="同步对话接口")
+async def chat(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service)
+):
+    """同步对话接口：等待完整回答后返回"""
+    answer = await service.run_chain(query)
+    return {"answer": answer}
+
+
+@router.get("/chat/stream", summary="流式对话接口（SSE）")
+async def chat_stream(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service)
+):
+    """
+    流式对话接口：基于 SSE 实时返回内容
+
+    - **query**: 用户问题
+    - 返回: text/event-stream 流式数据
+    """
+
+    async def event_generator():
+        """SSE 事件生成器"""
+        try:
+            async for chunk in service.stream_chain(query):
+                # SSE 格式：data: 内容\n\n
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+
+            # 发送完成事件
+            yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+        },
+    )
+```
+
+### SSE 数据格式
+
+SSE 的数据格式很简单：
+
+```
+data: {"content": "你"}
+
+data: {"content": "好"}
+
+data: {"content": "！"}
+
+data: {"done": true}
+
+```
+
+每个事件以 `data:` 开头，以 `\n\n` 结尾。
+
+### 测试流式接口
+
+```bash
+curl -N "http://localhost:8000/ai/chat/stream?query=什么是LangChain"
+```
+
+可以看到，通过 SSE 的接口就可以流式地返回内容了。
+
+---
+
+## 前端调用 SSE
+
+有的同学可能不知道 SSE 的接口怎么调用，我们写一下前端代码。
+
+创建 `public/sse-test.html`：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE 流式接口测试</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 640px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            padding: 0.6rem 1.2rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button.primary {
+            background: #2563eb;
+            color: white;
+        }
+        button.primary:hover { background: #1d4ed8; }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .output {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+            min-height: 120px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .output:empty::before {
+            content: "回复将显示在这里...";
+            color: #9ca3af;
+        }
+        .status {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <h1>SSE 流式接口测试</h1>
+
+    <label for="apiUrl">API 地址</label>
+    <input type="text" id="apiUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
+
+    <label for="query">问题</label>
+    <input type="text" id="query" placeholder="例如：什么是 LangChain？" value="什么是 LangChain？">
+
+    <button type="button" id="btn" class="primary">开始流式请求</button>
+    <p class="status" id="status"></p>
+    <div class="output" id="output"></div>
+
+    <script>
+        const apiUrlInput = document.getElementById("apiUrl");
+        const queryInput = document.getElementById("query");
+        const btn = document.getElementById("btn");
+        const output = document.getElementById("output");
+        const status = document.getElementById("status");
+
+        btn.addEventListener("click", () => {
+            const baseUrl = apiUrlInput.value.replace(/\/$/, "");
+            const q = queryInput.value.trim();
+
+            if (!q) {
+                status.textContent = "请输入问题";
+                return;
+            }
+
+            const url = `${baseUrl}/ai/chat/stream?query=${encodeURIComponent(q)}`;
+            output.textContent = "";
+            btn.disabled = true;
+            status.textContent = "连接中...";
+
+            // 使用 EventSource 监听 SSE
+            const eventSource = new EventSource(url);
+
+            eventSource.onmessage = ({ data }) => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.content) {
+                        output.textContent += parsed.content;
+                    }
+                    if (parsed.done) {
+                        eventSource.close();
+                        btn.disabled = false;
+                        status.textContent = "完成";
+                    }
+                } catch (e) {
+                    output.textContent += data;
+                }
+                status.textContent = "接收中...";
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                btn.disabled = false;
+                status.textContent = "连接已结束";
+            };
+        });
+    </script>
+</body>
+</html>
+```
+
+样式是让 AI 写的，不用管，只看这部分：
+
+![前端 SSE 调用](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/15_公众号_Yi昭.png)
+
+就是调用 `EventSource` 的 API，在 `onmessage` 回调里接收 data 就可以了。
+
+### 配置静态文件访问
+
+更新 `main.py`，添加静态文件服务：
+
+```python
+"""
+应用入口
+"""
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from modules.book.router import router as book_router
+from modules.ai.router import router as ai_router
+
+app = FastAPI(title="FastAPI + LangChain Demo", version="1.0.0")
+
+# 注册路由
+app.include_router(book_router)
+app.include_router(ai_router)
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="public"), name="static")
+
+
+@app.get("/", summary="健康检查")
+async def root():
+    return {"message": "FastAPI + LangChain Demo is running!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+访问 http://localhost:8000/static/sse-test.html
+
+这就是 SSE 流式返回内容的体验，AI 接口基本都用这种方式来做流式功能。
+
+---
+
+## 代码优化：解耦 ChatModel
+
+现在这样写是 Service 和具体的 ChatModel 耦合了，实际上应该拆分出去，动态注入。
+
+我们用 FastAPI 的依赖注入方式创建：
+
+创建 `modules/ai/dependencies.py`：
+
+```python
+"""
+AI 依赖注入：创建 ChatModel provider
+"""
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+
+load_dotenv()
+
+
+def get_chat_model() -> ChatOpenAI:
+    """
+    创建 ChatModel 实例（类似 Nest 的 useFactory provider）
+
+    Returns:
+        ChatOpenAI: 大语言模型实例
+    """
+    return ChatOpenAI(
+        temperature=0.7,
+        model=os.getenv("MODEL_NAME", "qwen-plus"),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+    )
+```
+
+更新 `modules/ai/service.py`：
+
+```python
+"""
+AI Service：LangChain 业务逻辑（解耦版）
+"""
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import Runnable
+
+
+class AIService:
+    """AI 服务"""
+
+    def __init__(self, model: ChatOpenAI):
+        # 通过构造器注入 ChatModel，实现解耦
+        prompt = PromptTemplate.from_template(
+            "请回答以下问题：\n\n{query}"
+        )
+
+        # LCEL 组装 Chain：prompt → model → parser
+        self.chain: Runnable = prompt | model | StrOutputParser()
+
+    async def run_chain(self, query: str) -> str:
+        """同步调用 Chain"""
+        return await self.chain.ainvoke({"query": query})
+
+    async def stream_chain(self, query: str):
+        """流式调用 Chain（生成器）"""
+        async for chunk in self.chain.astream({"query": query}):
+            yield chunk
+```
+
+更新 `modules/ai/router.py`：
+
+```python
+"""
+AI Router：AI 接口路由（解耦版）
+"""
+import json
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from langchain_openai import ChatOpenAI
+from .service import AIService
+from .dependencies import get_chat_model
+
+router = APIRouter(prefix="/ai", tags=["AI 接口"])
+
+
+def get_ai_service(model: ChatOpenAI = Depends(get_chat_model)) -> AIService:
+    """
+    创建 AI Service，注入 ChatModel 依赖
+
+    Args:
+        model: 大语言模型实例（由 get_chat_model 提供）
+
+    Returns:
+        AIService: AI 服务实例
+    """
+    return AIService(model)
+
+
+@router.get("/chat", summary="同步对话接口")
+async def chat(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service)
+):
+    """同步对话接口"""
+    answer = await service.run_chain(query)
+    return {"answer": answer}
+
+
+@router.get("/chat/stream", summary="流式对话接口（SSE）")
+async def chat_stream(
+    query: str = Query(..., description="用户问题"),
+    service: AIService = Depends(get_ai_service)
+):
+    """流式对话接口：基于 SSE 实时返回内容"""
+
+    async def event_generator():
+        """SSE 事件生成器"""
+        try:
+            async for chunk in service.stream_chain(query):
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+```
+
+这样就实现了 ChatModel 和业务逻辑的解耦，可以动态切换模型。
+
+![解耦 ChatModel](../IMG/2026-03-08_NestLangChain实现基于SSE的流式ai接口/18_公众号_Yi昭.png)
+
+---
+
+## 学习要点
+
+1. **FastAPI** 是 Python 生态最主流的高性能 Web 框架，基于 Starlette 和 Pydantic
+2. **MVC 架构**：Router 定义路由接口，Service 写业务逻辑
+3. **依赖注入（DI）**：通过 `Depends()` 实现，Service 可以注入到 Router 中
+4. **LCEL Chain** 定义在 Service 构造器里，避免重复创建
+5. **同步和流式**分别调用 `ainvoke` 和 `astream` 方法
+6. **SSE（Server-Sent Events）** 是 AI 接口流式返回内容最常用的方式
+7. **StreamingResponse** + 异步生成器实现 SSE，`Content-Type` 设为 `text/event-stream`
+8. **SSE 数据格式**：`data: 内容\n\n`，每个事件以 `data:` 开头，`\n\n` 结尾
+9. **前端用 EventSource** 监听 SSE 的 `message` 事件，拿到流式返回的数据
+10. **解耦 ChatModel**：通过依赖注入创建 ChatModel provider，Service 里直接注入，实现解耦
+
+## 扩展方向
+
+- 学习 FastAPI 的 WebSocket 实现双向通信
+- 探索 FastAPI 的中间件、异常处理、CORS 配置
+- 学习 LangChain 的 LangSmith 追踪和监控
+- 结合 Redis 实现对话记忆的持久化
+- 学习 FastAPI 的异步数据库操作（SQLAlchemy + asyncpg）
+- 探索流式接口的错误处理和重连机制
+
+---
+
+## 配套代码库
+
+**代码库地址**：https://github.com/iiixiyan/agent-learning-code/tree/main/02-enterprise-backend/20-fastapi-sse
+
+包含本文的完整可运行代码示例（FastAPI + LangChain SSE 流式接口 + 前端测试页面）。
+
+---
+
+**上一篇**：[LangChain 整体总结](../01-第一阶段-Agent基础入门/19_LangChain整体总结.md) | **下一篇**：[FastAPI + Tool 实现定时任务（上）](./21_FastAPI+tool实现定时任务(上).md)
