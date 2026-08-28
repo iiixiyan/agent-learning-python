@@ -1,301 +1,934 @@
 # 图编排引擎：LangGraph 和多 Agent 架构
 
-> **Python 版** | 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 技术栈
+> **Python 版** | 基于 LangGraph Python + LangChain Python 技术栈
+> 原课程基于 Node.js + LangChain JS，本文转换为 Python 版本
 
 ---
 
-神光的幸福生活 2026年4月12日 00:02
+## 为什么需要多 Agent 架构？
 
-复杂的 Agent 产品基本都是多 Agent 架构。
+复杂的 Agent 产品基本都是多 Agent 架构。为什么呢？
 
-为什么呢？
+![单 Agent 架构问题](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/0_公众号_Yi昭.png)
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/0_公众号_Yi昭.png)
+### 原因一：决策准确率更高、token 消耗更低
 
-单 Agent 架构下，所有 tool 的描述、每个功能的 prompt 都放到 system prompt 里。
-
-实际上执行每个功能只需要其中一部分 prompt，但每次都全带上。
-
-这样会导致 token 消耗更高，更重要的是很多无关信息干扰，思考效率低还更容易出错。
+单 Agent 架构下，所有 Tool 的描述、每个功能的 Prompt 都放到 System Prompt 里。实际上执行每个功能只需要其中一部分 Prompt，但每次都全带上。这样会导致：
+- Token 消耗更高
+- 无关信息干扰，思考效率低
+- 更容易出错
 
 而如果你拆分成多个 Agent 呢？
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/1_公众号_Yi昭.png)
+![多 Agent 架构优势](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/1_公众号_Yi昭.png)
 
-每个 Agent 只保留需要的 prompt，执行功能的时候，消耗的 token 更少，没有无关信息干扰，准确率也更高。
+每个 Agent 只保留需要的 Prompt，执行功能的时候：
+- 消耗的 Token 更少
+- 没有无关信息干扰
+- 准确率更高
 
-再就是单 Agent 只有一个大脑，需要一步步思考，调用 tool
+### 原因二：并行思考和任务处理
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/2_公众号_Yi昭.png)
+单 Agent 只有一个大脑，需要一步步思考，调用 Tool：
 
-而多 Agent 的多个大脑当然是可以并行思考的，主 Agent 下发任务，子 Agent 并行处理完成后返回
+![单 Agent 串行思考](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/2_公众号_Yi昭.png)
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/3_公众号_Yi昭.png)
+而多 Agent 的多个大脑可以并行思考，主 Agent 下发任务，子 Agent 并行处理完成后返回：
 
-还有，单 Agent 虽然可以加上反思阶段，但相当于自己给自己纠错
+![多 Agent 并行处理](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/3_公众号_Yi昭.png)
 
-而多 Agent 每个都是不同的角色，可以互相讨论纠错
+### 原因三：多角色互相讨论，纠错能力更强
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/4_公众号_Yi昭.png)
+单 Agent 虽然可以加上反思阶段，但相当于自己给自己纠错。
 
-基于这三个原因：
+而多 Agent 每个都是不同的角色，可以互相讨论纠错：
 
-- **决策准确率更高、token 消耗更低**：每个 Agent 只带必要的最少prompt，没有冗余信息干扰，虽然调用 LLM 次数多了，但更省 token、决策更准、更稳定
-- **并行思考和任务处理**：主管分派任务，子 Agent 并行处理，整体效率更高
-- **多角色互相讨论，纠错能力更强**：多 Agent 有不同角色，可以互相监督、互相纠错，比单个 Agent 自己反思更靠谱，复杂任务表现更强
+![多 Agent 互相讨论](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/4_公众号_Yi昭.png)
+
+### 总结
+
+| 优势 | 说明 |
+|------|------|
+| **决策准确率更高、token 消耗更低** | 每个 Agent 只带必要的最少 Prompt，没有冗余信息干扰 |
+| **并行思考和任务处理** | 主管分派任务，子 Agent 并行处理，整体效率更高 |
+| **多角色互相讨论，纠错能力更强** | 多 Agent 有不同角色，可以互相监督、互相纠错 |
 
 现在复杂 Agent 产品基本都是多 Agent 架构的。
 
-实现 Multi Agent 就需要学习 LangGraph 了。
+实现 Multi Agent 就需要学习 LangGraph 了。用到的 API 还是 LangChain 那些，但它多了一套图编排引擎。
 
-用到的 api 还是 LangChain 那些，但它多了一套图编排引擎。
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/5_公众号_Yi昭.png)
+![LangGraph 架构](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/5_公众号_Yi昭.png)
 
 我们学了 LangChain 的组件，学了 LCEL 的线性编排，今天来学一下 LangGraph 的图编排引擎。
 
-我们直接通过代码来学一下：
+---
 
-    mkdir langgraph-testcd&nbsp;langgraph-testnpm init -y
+## 一、LangGraph 基础
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/6_公众号_Yi昭.png)
+### 安装依赖
 
-安装依赖：
+```bash
+pip install langgraph langchain langchain-openai python-dotenv
+```
 
-    ppip install langchain_langgraph langchain_core langchain_openai dotenv zod
+### 创建项目
 
-创建 .env
+```bash
+mkdir langgraph-test
+cd langgraph-test
+```
 
-    OPENAI_API_KEY=sk-xxxOPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1MODEL_NAME=qwen-plus
+创建 `.env`：
 
-创建 src/basic-graph.mjs
+```env
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+MODEL_NAME=qwen-plus
+```
 
-    import&nbsp;{ Annotation, END, START, StateGraph }&nbsp;from"langchain_langgraph";const&nbsp;StateAnnotation = Annotation.Root({text: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),});const&nbsp;step1 =&nbsp;(state) =&gt;&nbsp;({&nbsp;text:&nbsp;`${state.text}&nbsp;-&gt; step1`&nbsp;});const&nbsp;step2 =&nbsp;(state) =&gt;&nbsp;({&nbsp;text:&nbsp;`${state.text}&nbsp;-&gt; step2`&nbsp;});const&nbsp;graph =&nbsp;new&nbsp;StateGraph(StateAnnotation)&nbsp; .addNode("step1", step1)&nbsp; .addNode("step2", step2)&nbsp; .addEdge(START,&nbsp;"step1")&nbsp; .addEdge("step1",&nbsp;"step2")&nbsp; .addEdge("step2", END)&nbsp; .compile();// 导出为 Mermaid：可复制到 https://mermaid.live 或 Markdown 的 ```mermaid 代码块const&nbsp;drawable =&nbsp;await&nbsp;graph.getGraphAsync();const&nbsp;mermaid = drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;});console.log(mermaid);const&nbsp;result =&nbsp;await&nbsp;graph.invoke({&nbsp;text:&nbsp;"hello"&nbsp;});console.log("result:", result);
+### 第一个图：基础 StateGraph
 
-创建 StateGraph 图
+创建 `basic_graph.py`：
 
-添加两个节点（node），加上固定的 START、END 节点
+```python
+"""
+basic_graph.py - LangGraph 基础示例
+"""
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
 
-然后用边（edge）连起来
 
-编译后执行
+# 定义状态（State）
+class State(TypedDict):
+    text: str
 
-> 🎬 视频演示（原公众号视频）
 
-Annotation 用于创建 State，指定默认值（default）和合并逻辑（reducer）
+# 定义节点（Node）
+def step1(state: State) -> State:
+    """第一步：在文本后追加 step1"""
+    return {"text": f"{state['text']} -> step1"}
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/7_公众号_Yi昭.png)
 
-这样我们基于 LangGraph 的第一个图就完成了。
+def step2(state: State) -> State:
+    """第二步：在文本后追加 step2"""
+    return {"text": f"{state['text']} -> step2"}
 
-图中当然有分支和循环。
 
-先试一下分支：
+# 创建图
+graph = StateGraph(State)
 
-src/conditional-routing.mjs
+# 添加节点
+graph.add_node("step1", step1)
+graph.add_node("step2", step2)
 
-    import&nbsp;{ Annotation, END, START, StateGraph }&nbsp;from"langchain_langgraph";const&nbsp;StateAnnotation = Annotation.Root({query: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),route: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"chat",&nbsp; }),answer: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),});const&nbsp;router =&nbsp;(state) =&gt;&nbsp;{const&nbsp;isMath =&nbsp;/[+\-*/]/.test(state.query);return&nbsp;{&nbsp;route: isMath ?&nbsp;"math"&nbsp;:&nbsp;"chat"&nbsp;};};const&nbsp;mathNode =&nbsp;(state) =&gt;&nbsp;{try&nbsp;{&nbsp; &nbsp;&nbsp;return&nbsp;{&nbsp;answer:&nbsp;String(eval(state.query)) };&nbsp; }&nbsp;catch&nbsp;{&nbsp; &nbsp;&nbsp;return&nbsp;{&nbsp;answer:&nbsp;"表达式无法计算"&nbsp;};&nbsp; }};const&nbsp;chatNode =&nbsp;(state) =&gt;&nbsp;({&nbsp;answer:&nbsp;`你说的是：${state.query}`&nbsp;});const&nbsp;graph =&nbsp;new&nbsp;StateGraph(StateAnnotation)&nbsp; .addNode("router", router)&nbsp; .addNode("math", mathNode)&nbsp; .addNode("chat", chatNode)&nbsp; .addEdge(START,&nbsp;"router")&nbsp; .addConditionalEdges("router", (state) =&gt; state.route, {&nbsp; &nbsp;&nbsp;math:&nbsp;"math",&nbsp; &nbsp;&nbsp;chat:&nbsp;"chat",&nbsp; })&nbsp; .addEdge("math", END)&nbsp; .addEdge("chat", END)&nbsp; .compile();// 导出为 Mermaid：可复制到 https://mermaid.live 或 Markdown 的 ```mermaid 代码块const&nbsp;drawable =&nbsp;await&nbsp;graph.getGraphAsync();const&nbsp;mermaid = drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;});console.log(mermaid);console.log("result:",await&nbsp;graph.invoke({&nbsp;query:&nbsp;"你好"&nbsp;}));console.log(&nbsp; &nbsp;&nbsp;"result:",&nbsp; &nbsp;&nbsp;await&nbsp;graph.invoke({&nbsp;query:&nbsp;"10 * 8"&nbsp;}));
+# 添加边（Edge）
+graph.add_edge(START, "step1")
+graph.add_edge("step1", "step2")
+graph.add_edge("step2", END)
 
-用 addConditionalEdges 添加分支
+# 编译图
+app = graph.compile()
 
-判断文本如果有+-\*/字符就走 math 分支，否则走 chat 分支
+# 执行图
+result = app.invoke({"text": "hello"})
+print("result:", result)
+# 输出: result: {'text': 'hello -> step1 -> step2'}
+```
 
-> 🎬 视频演示（原公众号视频）
+### 核心概念
 
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/8_公众号_Yi昭.png)
+| 概念 | 说明 | Python API |
+|------|------|------------|
+| **State（状态）** | 图中节点之间传递的数据 | `TypedDict` 或 `Annotation` |
+| **Node（节点）** | 执行具体逻辑的函数 | `graph.add_node(name, func)` |
+| **Edge（边）** | 节点之间的连接 | `graph.add_edge(from, to)` |
+| **START** | 图的入口节点 | `langgraph.graph.START` |
+| **END** | 图的出口节点 | `langgraph.graph.END` |
+| **compile()** | 编译图为可执行应用 | `graph.compile()` |
 
-接下来试一下循环，其实它也是用分支来实现：
+![LangGraph 基础概念](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/7_公众号_Yi昭.png)
 
-src/loop-retry.mjs
+### 可视化图
 
-    import&nbsp;{ Annotation, END, START, StateGraph }&nbsp;from"langchain_langgraph";const&nbsp;StateAnnotation = Annotation.Root({tries: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;0,&nbsp; }),ok: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;false,&nbsp; }),message: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),});const&nbsp;attempt =&nbsp;(state) =&gt;&nbsp;{const&nbsp;tries = state.tries +&nbsp;1;const&nbsp;ok = tries &gt;=&nbsp;3;return&nbsp;{&nbsp; &nbsp; tries,&nbsp; &nbsp; ok,&nbsp; &nbsp;&nbsp;message: ok ?&nbsp;`第&nbsp;${tries}&nbsp;次成功`&nbsp;:&nbsp;`第&nbsp;${tries}&nbsp;次失败，继续重试`,&nbsp; };};const&nbsp;graph =&nbsp;new&nbsp;StateGraph(StateAnnotation)&nbsp; .addNode("attempt", attempt)&nbsp; .addEdge(START,&nbsp;"attempt")&nbsp; .addConditionalEdges("attempt", (state) =&gt; (state.ok ?&nbsp;"done"&nbsp;:&nbsp;"retry"), {&nbsp; &nbsp;&nbsp;retry:&nbsp;"attempt",&nbsp; &nbsp;&nbsp;done: END,&nbsp; })&nbsp; .compile();// 导出为 Mermaid：可复制到 https://mermaid.live 或 Markdown 的 ```mermaid 代码块const&nbsp;drawable =&nbsp;await&nbsp;graph.getGraphAsync();const&nbsp;mermaid = drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;});console.log(mermaid);const&nbsp;result =&nbsp;await&nbsp;graph.invoke({&nbsp;tries:&nbsp;0&nbsp;});console.log("result:", result);
+LangGraph 支持导出 Mermaid 格式的图：
 
-同样用 addConditionalEdges 判断条件满足就到 END 节点，否则重新路由到之前的节点
+```python
+# 获取图的可视化数据
+graph_data = app.get_graph()
 
-这样就可以实现循环效果
+# 导出为 Mermaid 格式
+mermaid_code = graph_data.draw_mermaid()
+print(mermaid_code)
+```
 
-> 🎬 视频演示（原公众号视频）
-
-经过这几个例子，应该能看出节点之间是怎么通信的：
-
-通过 state
-
-那把 state 保存下来不就是把当前图的执行状态保存下来了么？
-
-这个通过 ChekpointerSaver 的 api 就可以保存
-
-创建 src/checkpointer-memory.mjs
-
-    import&nbsp;{&nbsp; Annotation,&nbsp; END,&nbsp; MemorySaver,&nbsp; START,&nbsp; StateGraph,}&nbsp;from"langchain_langgraph";const&nbsp;StateAnnotation = Annotation.Root({visitCount: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;0,&nbsp; }),message: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),});/** 每跑一轮图，给「当前会话」访问次数 +1 */function&nbsp;recordVisit(state)&nbsp;{const&nbsp;visitCount = state.visitCount +&nbsp;1;const&nbsp;message =&nbsp; &nbsp; visitCount ===&nbsp;1&nbsp; &nbsp; &nbsp; ?&nbsp;"这是你在本会话里第 1 次进入。"&nbsp; &nbsp; &nbsp; :&nbsp;`这是你在本会话里第&nbsp;${visitCount}&nbsp;次进入`;return&nbsp;{ visitCount, message };}const&nbsp;graph =&nbsp;new&nbsp;StateGraph(StateAnnotation)&nbsp; .addNode("recordVisit", recordVisit)&nbsp; .addEdge(START,&nbsp;"recordVisit")&nbsp; .addEdge("recordVisit", END);const&nbsp;checkpointer =&nbsp;new&nbsp;MemorySaver();const&nbsp;app = graph.compile({ checkpointer });const&nbsp;user1 = {&nbsp;configurable: {&nbsp;thread_id:&nbsp;"用户-小张"&nbsp;} };const&nbsp;user2 = {&nbsp;configurable: {&nbsp;thread_id:&nbsp;"用户-小李"&nbsp;} };const&nbsp;res1 =&nbsp;await&nbsp;app.invoke({}, user1);const&nbsp;res2 =&nbsp;await&nbsp;app.invoke({}, user1);const&nbsp;res3 =&nbsp;await&nbsp;app.invoke({}, user1);const&nbsp;res4 &nbsp;=&nbsp;await&nbsp;app.invoke({}, user2);console.log(res1)console.log(res2);console.log(res3);console.log(res4);
-
-我们用 MemorySaver 来把 state 保存到内存里，这样下次就会基于上次的 state 继续执行
-
-当然，还可以保存到 sqlite、redis 等，分别用 SqliteSave、RedisSaver 等 api
-
-> 🎬 视频演示（原公众号视频）
-
-我们用 cursor 之类的 coding agent，它经常会让你确认，确认后再继续执行，这种打断功能咋做呢？
-
-LangGraph 提供了 interrupt 的 api
-
-创建 src/graph-interrupt.mjs
-
-    import&nbsp;{ createInterface }&nbsp;from"node:readline/promises";import&nbsp;{&nbsp; Annotation,&nbsp; Command,&nbsp; END,&nbsp; MemorySaver,&nbsp; START,&nbsp; StateGraph,&nbsp; interrupt,}&nbsp;from"langchain_langgraph";const&nbsp;StateAnnotation = Annotation.Root({actionSummary: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),userInput: Annotation({&nbsp; &nbsp;&nbsp;reducer:&nbsp;(_prev, next) =&gt;&nbsp;next,&nbsp; &nbsp;&nbsp;default:&nbsp;()&nbsp;=&gt;"",&nbsp; }),});/** 展示一笔待确认的转账 */const&nbsp;showTransfer =&nbsp;()&nbsp;=&gt;&nbsp;({actionSummary:&nbsp;"向张三转账 ¥100（模拟，不会真扣款）",});/** 停在这里等人输入；resume 的值会写进 userInput */const&nbsp;waitConfirm =&nbsp;(state) =&gt;&nbsp;{const&nbsp;text = interrupt({&nbsp; &nbsp;&nbsp;hint:&nbsp;"终端里输入「确认」或备注后回车，图才会继续",&nbsp; &nbsp;&nbsp;actionSummary: state.actionSummary,&nbsp; });return&nbsp;{&nbsp;userInput:&nbsp;String(text) };};const&nbsp;graph =&nbsp;new&nbsp;StateGraph(StateAnnotation)&nbsp; .addNode("showTransfer", showTransfer)&nbsp; .addNode("waitConfirm", waitConfirm)&nbsp; .addEdge(START,&nbsp;"showTransfer")&nbsp; .addEdge("showTransfer",&nbsp;"waitConfirm")&nbsp; .addEdge("waitConfirm", END)&nbsp; .compile({&nbsp;checkpointer:&nbsp;new&nbsp;MemorySaver() });// 导出为 Mermaid：可复制到 https://mermaid.live 或 Markdown 的 ```mermaid 代码块const&nbsp;drawable =&nbsp;await&nbsp;graph.getGraphAsync();const&nbsp;mermaid = drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;});console.log(mermaid);const&nbsp;config = {&nbsp;configurable: {&nbsp;thread_id:&nbsp;"interrupt-demo"&nbsp;} };const&nbsp;paused =&nbsp;await&nbsp;graph.invoke({}, config);console.log("\n待你确认：", paused.__interrupt__?.[0]?.value);const&nbsp;rl = createInterface({&nbsp;input: process.stdin,&nbsp;output: process.stdout });const&nbsp;line = (await&nbsp;rl.question("&gt; ")).trim();await&nbsp;rl.close();if&nbsp;(!line) {console.error("未输入，退出。");&nbsp; process.exit(1);}const&nbsp;done =&nbsp;await&nbsp;graph.invoke(new&nbsp;Command({&nbsp;resume: line }), config);console.log("结果：", done);
-
-用 interrupt 中断图的执行
-
-等待用户输入之后再次 invoke，传入 new Command({resume: 'xxx'})
-
-这样图就会在上次断点位置继续执行
-
-这里用了 nodejs 的 readline 包读取键盘输入
-
-> 🎬 视频演示（原公众号视频）
-
-这样就可以实现图的中断、恢复了。
-
-此外，有些常用的节点，langgrph 给封装好了，放到 prebuilt 下：
-
-src/prebuilt-tool-node.mjs
-
-    import&nbsp;"dotenv/config";import&nbsp;{ HumanMessage }&nbsp;from"langchain_core/messages";import&nbsp;{ tool }&nbsp;from"langchain_core/tools";import&nbsp;{&nbsp; END,&nbsp; MessagesAnnotation,&nbsp; START,&nbsp; StateGraph,}&nbsp;from"langchain_langgraph";import&nbsp;{ ToolNode, toolsCondition }&nbsp;from"langchain_langgraph/prebuilt";import&nbsp;{ ChatOpenAI }&nbsp;from"langchain_openai";import&nbsp;{ z }&nbsp;from"zod";import&nbsp;{ getProductBySku }&nbsp;from"./inventory-mock.mjs";const&nbsp;getProductStock = tool(async&nbsp;({ sku }) =&gt; getProductBySku(sku),&nbsp; {&nbsp; &nbsp;&nbsp;name:&nbsp;"get_product_stock",&nbsp; &nbsp;&nbsp;description:&nbsp; &nbsp; &nbsp;&nbsp;"按 SKU 查商品名与库存，SKU 如 SKU-001。",&nbsp; &nbsp;&nbsp;schema: z.object({&nbsp; &nbsp; &nbsp;&nbsp;sku: z.string().describe("商品 SKU"),&nbsp; &nbsp; }),&nbsp; });const&nbsp;tools = [getProductStock];const&nbsp;llm =&nbsp;new&nbsp;ChatOpenAI({&nbsp;modelName: process.env.MODEL_NAME,apiKey: process.env.OPENAI_API_KEY,configuration: {&nbsp; &nbsp; &nbsp;&nbsp;baseURL: process.env.OPENAI_BASE_URL,&nbsp; },}).bindTools(tools);asyncfunction&nbsp;agent(state)&nbsp;{const&nbsp;response =&nbsp;await&nbsp;llm.invoke(state.messages);return&nbsp;{&nbsp;messages: response };}const&nbsp;toolNode =&nbsp;new&nbsp;ToolNode(tools);const&nbsp;graph =&nbsp;new&nbsp;StateGraph(MessagesAnnotation)&nbsp; .addNode("agent", agent)&nbsp; .addNode("tools", toolNode)&nbsp; .addEdge(START,&nbsp;"agent")&nbsp; .addConditionalEdges("agent", toolsCondition, ["tools", END])&nbsp; .addEdge("tools",&nbsp;"agent")&nbsp; .compile();const&nbsp;result =&nbsp;await&nbsp;graph.invoke({messages: [&nbsp; &nbsp;&nbsp;new&nbsp;HumanMessage(&nbsp; &nbsp; &nbsp;&nbsp;"查一下 SKU-001 的库存还有多少，回答里带上商品名和数字。"&nbsp; &nbsp; ),&nbsp; ],});// 导出为 Mermaid：可复制到 https://mermaid.live 或 Markdown 的 ```mermaid 代码块const&nbsp;drawable =&nbsp;await&nbsp;graph.getGraphAsync();const&nbsp;mermaid = drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;});console.log(mermaid);const&nbsp;last = result.messages.at(-1);console.log(last?.content ?? result.messages);
-
-比如我们要调用 tool，用 graph 的写法怎么写呢？
-
-创建 model 的节点，创建 tool 的节点
-
-然后加一个 conditional 节点，判断如果有 tool call 就走 tool 节点，否则走 END
-
-但不用自己写，langgraph 内置了 ToolNode 和 toolsCondition 的 api
-
-用到的 inventory.mock.mjs
-
-    /** 假数据，模拟「按 SKU 查库存」接口 */const&nbsp;rows = [&nbsp; {&nbsp;sku:&nbsp;"SKU-001",&nbsp;name:&nbsp;"无线鼠标",&nbsp;stock:&nbsp;42&nbsp;},&nbsp; {&nbsp;sku:&nbsp;"SKU-002",&nbsp;name:&nbsp;"机械键盘",&nbsp;stock:&nbsp;7&nbsp;},&nbsp; {&nbsp;sku:&nbsp;"SKU-003",&nbsp;name:&nbsp;"USB-C 线缆",&nbsp;stock:&nbsp;120&nbsp;},];exportfunction&nbsp;getProductBySku(sku)&nbsp;{const&nbsp;key =&nbsp;String(sku).trim().toUpperCase();const&nbsp;row = rows.find((r) =&gt;&nbsp;r.sku.toUpperCase() === key);if&nbsp;(!row)&nbsp;returnJSON.stringify({&nbsp;found:&nbsp;false,&nbsp;sku:&nbsp;String(sku).trim() });returnJSON.stringify({&nbsp;found:&nbsp;true, ...row });}
-
-> 🎬 视频演示（原公众号视频）
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/9_公众号_Yi昭.png)
-
-当然，像这么常用的 agent loop 自然也给封装好了，就是 createAgent 的 api：
-
-prebuilt-agent.mjs
-
-    import&nbsp;"dotenv/config";import&nbsp;{ HumanMessage }&nbsp;from"langchain_core/messages";import&nbsp;{ ChatOpenAI }&nbsp;from"langchain_openai";import&nbsp;{ MemorySaver }&nbsp;from"langchain_langgraph";import&nbsp;{ createAgent, tool }&nbsp;from"langchain";import&nbsp;{ z }&nbsp;from"zod";import&nbsp;{ getProductBySku }&nbsp;from"./inventory-mock.mjs";const&nbsp;getProductStock = tool(async&nbsp;({ sku }) =&gt; getProductBySku(sku),&nbsp; {&nbsp; &nbsp;&nbsp;name:&nbsp;"get_product_stock",&nbsp; &nbsp;&nbsp;description:&nbsp; &nbsp; &nbsp;&nbsp;"按 SKU 查商品名与库存，SKU 如 SKU-001。",&nbsp; &nbsp;&nbsp;schema: z.object({&nbsp; &nbsp; &nbsp;&nbsp;sku: z.string().describe("商品 SKU"),&nbsp; &nbsp; }),&nbsp; });const&nbsp;model =&nbsp;new&nbsp;ChatOpenAI({&nbsp;modelName: process.env.MODEL_NAME,apiKey: process.env.OPENAI_API_KEY,configuration: {&nbsp; &nbsp; &nbsp;&nbsp;baseURL: process.env.OPENAI_BASE_URL,&nbsp; },});const&nbsp;agent = createAgent({&nbsp; model,tools: [getProductStock],systemPrompt:&nbsp; &nbsp;&nbsp;"你是仓库助手。问库存时必须调用 get_product_stock（模拟数据），禁止编造。",checkpointer:&nbsp;new&nbsp;MemorySaver(),});const&nbsp;result =&nbsp;await&nbsp;agent.invoke(&nbsp; {&nbsp;messages: [new&nbsp;HumanMessage("SKU-002 还剩多少库存？")] },&nbsp; {&nbsp;configurable: {&nbsp;thread_id:&nbsp;"demo-thread"&nbsp;} });// 导出为 Mermaid：可复制到 https://mermaid.live 或 Markdown 的 ```mermaid 代码块const&nbsp;drawable =&nbsp;await&nbsp;agent.graph.getGraphAsync();const&nbsp;mermaid = drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;});console.log(mermaid);const&nbsp;last = result.messages.at(-1);console.log(last?.content ?? result);
-
-直接用 createAgent 来跑 agent loop
-
-看一下它的图：
-
-> 🎬 视频演示（原公众号视频）
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/10_公众号_Yi昭.png)
-
-和刚才写的一样，这个 api 内部就是基于 LangGraph 构建的 agent loop 的图。
-
-学完 LangGraph 的图，我们来写一个多 Agent 的架构
-
-多 Agent 最常用的是 Supervisor - Worker 模式，也就是“主管 - 工人”模式
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/11_公众号_Yi昭.png)
-
-langchain 提供了这种多 Agent 架构的包 langchain_langgraph-supervisor
-
-安装下：
-
-    ppip install langchain_langgraph-supervisor
-
-创建 multi-agent-supervisor.mjs
-
-    import&nbsp;"dotenv/config";import&nbsp;{ HumanMessage }&nbsp;from"langchain_core/messages";import&nbsp;{ createSupervisor }&nbsp;from"langchain_langgraph-supervisor";import&nbsp;{ ChatOpenAI }&nbsp;from"langchain_openai";import&nbsp;{ createAgent, tool }&nbsp;from"langchain";import&nbsp;{ z }&nbsp;from"zod";import&nbsp;{ lookupCityTrivia, lookupWeather }&nbsp;from"./simple-mock.mjs";const&nbsp;model =&nbsp;new&nbsp;ChatOpenAI({modelName: process.env.MODEL_NAME,apiKey: process.env.OPENAI_API_KEY,configuration: {&nbsp; &nbsp;&nbsp;baseURL: process.env.OPENAI_BASE_URL,&nbsp; },});const&nbsp;lookupWeatherTool = tool(async&nbsp;({ city }) =&gt; lookupWeather(city),&nbsp; {&nbsp; &nbsp;&nbsp;name:&nbsp;"lookup_weather",&nbsp; &nbsp;&nbsp;description:&nbsp;"查询某城市当日天气概况（气温区间、天气、空气质量等）。",&nbsp; &nbsp;&nbsp;schema: z.object({&nbsp; &nbsp; &nbsp;&nbsp;city: z.string().describe("城市名，如 杭州"),&nbsp; &nbsp; }),&nbsp; });const&nbsp;lookupCityTriviaTool = tool(async&nbsp;({ city }) =&gt; lookupCityTrivia(city),&nbsp; {&nbsp; &nbsp;&nbsp;name:&nbsp;"lookup_city_trivia",&nbsp; &nbsp;&nbsp;description:&nbsp;"查询与某城市相关的一句趣味知识。",&nbsp; &nbsp;&nbsp;schema: z.object({&nbsp; &nbsp; &nbsp;&nbsp;city: z.string().describe("城市名，如 杭州"),&nbsp; &nbsp; }),&nbsp; });/** 子代理 A：只回答「天气」类问题 */const&nbsp;weatherAgent = createAgent({name:&nbsp;"weather_agent",description:&nbsp;"专门查天气",&nbsp; model,tools: [lookupWeatherTool],systemPrompt:&nbsp;"你只处理天气。用户提到城市时，用 lookup_weather 查询后再用中文简短说明。",});/** 子代理 B：只回答「城市小知识」 */const&nbsp;triviaAgent = createAgent({name:&nbsp;"trivia_agent",description:&nbsp;"专门讲与城市相关的小知识；必须调用 lookup_city_trivia。",&nbsp; model,tools: [lookupCityTriviaTool],systemPrompt:&nbsp;"你只讲城市小知识。先 lookup_city_trivia，再用人话转述，不要编造工具里没有的内容。",});/**&nbsp;* Supervisor：根据用户问的是「天气」还是「小知识」切换子代理。&nbsp;* （真实业务里还可以再加更多子代理，思路一样。）&nbsp;*/const&nbsp;workflow = createSupervisor({agents: [weatherAgent.graph, triviaAgent.graph],llm: model,prompt:&nbsp;`你是调度员，只负责选人，不要自己报气温、也不要自己讲城市百科。- 问天气、气温、下不下雨、空气 → 用 weather_agent- 问小知识、名胜、历史、一句介绍 → 用 trivia_agent`,});const&nbsp;app = workflow.compile();const&nbsp;drawable =&nbsp;await&nbsp;app.getGraphAsync();console.log(drawable.drawMermaid({&nbsp;withStyles:&nbsp;true&nbsp;}));const&nbsp;input = {messages: [&nbsp; &nbsp;&nbsp;new&nbsp;HumanMessage("查一下杭州的天气，再讲一条和杭州有关的小知识。"),&nbsp; ],};const&nbsp;nodePath = [];let&nbsp;finalState =&nbsp;null;const&nbsp;stream =&nbsp;await&nbsp;app.stream(input, {&nbsp;streamMode: ["updates",&nbsp;"values"] });forawait&nbsp;(const&nbsp;event&nbsp;of&nbsp;stream) {const&nbsp;[mode, payload] = event;if&nbsp;(mode ===&nbsp;"updates"&nbsp;&amp;&amp; payload &amp;&amp;&nbsp;typeof&nbsp;payload ===&nbsp;"object") {&nbsp; &nbsp; nodePath.push(...Object.keys(payload));&nbsp; }&nbsp;elseif&nbsp;(mode ===&nbsp;"values") {&nbsp; &nbsp; finalState = payload;&nbsp; }}console.log("路径:", nodePath.join(" → "));const&nbsp;last = finalState?.messages?.at(-1);console.log(last?.content ?? finalState?.messages);
-
-我们用 createAgent 创建了 2 个 子 Agent
-
-然后用 createSupervisor 创建主管 Agent：
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/12_公众号_Yi昭.png)
-
-子 Agent 一个查天气，一个查城市历史
-
-用 stream 可以拿到整个图运行过程的状态
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/13_公众号_Yi昭.png)
-
-它的 state 内容挺多的，所以支持几种模式
-
-updates 是增量模式，就是过滤出这个节点增量修改的 state 来
-
-values 是全量模式，给你所有的 state
-
-我们这里用 updates 模式拿到经过的节点的名字
-
-最后的回复用 values 模式拿
-
-用到查询代码的实现：
-
-    /** 假接口：演示 supervisor 如何把问题分给不同子代理 */function&nbsp;normCity(city)&nbsp;{returnString(city).trim();}const&nbsp;weatherTable = {&nbsp; 杭州: {&nbsp;summary:&nbsp;"多云转小雨",&nbsp;tempHighC:&nbsp;22,&nbsp;tempLowC:&nbsp;15,&nbsp;aqi:&nbsp;"良"&nbsp;},&nbsp; 北京: {&nbsp;summary:&nbsp;"晴",&nbsp;tempHighC:&nbsp;26,&nbsp;tempLowC:&nbsp;12,&nbsp;aqi:&nbsp;"轻度污染"&nbsp;},&nbsp; 上海: {&nbsp;summary:&nbsp;"阴",&nbsp;tempHighC:&nbsp;20,&nbsp;tempLowC:&nbsp;16,&nbsp;aqi:&nbsp;"良"&nbsp;},};const&nbsp;triviaTable = {&nbsp; 杭州:&nbsp;"西湖文化景观是世界文化遗产之一。",&nbsp; 北京:&nbsp;"故宫是世界上现存规模最大的古代宫殿建筑群之一。",&nbsp; 上海:&nbsp;"外滩万国建筑博览群是近代城市历史的缩影。",};/** 查某地当日天气摘要（模拟） */exportfunction&nbsp;lookupWeather(city)&nbsp;{const&nbsp;c = normCity(city);const&nbsp;w = weatherTable[c];if&nbsp;(!w) {&nbsp; &nbsp;&nbsp;returnJSON.stringify({&nbsp; &nbsp; &nbsp;&nbsp;city: c,&nbsp; &nbsp; &nbsp;&nbsp;summary:&nbsp;"暂无该城市数据，以下为占位",&nbsp; &nbsp; &nbsp;&nbsp;tempHighC:&nbsp;20,&nbsp; &nbsp; &nbsp;&nbsp;tempLowC:&nbsp;12,&nbsp; &nbsp; &nbsp;&nbsp;aqi:&nbsp;"—",&nbsp; &nbsp; });&nbsp; }returnJSON.stringify({&nbsp;city: c, ...w });}/** 查与某城市相关的一句小知识（模拟） */exportfunction&nbsp;lookupCityTrivia(city)&nbsp;{const&nbsp;c = normCity(city);const&nbsp;line = triviaTable[c];returnJSON.stringify({&nbsp; &nbsp;&nbsp;city: c,&nbsp; &nbsp;&nbsp;trivia: line ??&nbsp;`没有为「${c}」准备内置小知识，可换杭州/北京/上海试试。`,&nbsp; });}
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-这样，我们第一个多 Agent 的代码就跑通了。
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/14_公众号_Yi昭.png)
-
-虽然用 stream 的 values 模式可以打印 state，但是它内容太多了。
-
-如果想看一下执行过程，最好的方式是断点调试。
-
-> 🎬 视频演示（原公众号视频）
-
-通过调试，就可以清晰的看到整个 graph 的流转过程。
-
-也可以看到 langchain_langgraph-supervisor 的多 Agent 架构的实现原理，就是在 state 里保存了 messages 数组来传递信息
-
-回头看下这张图：
-
-![image](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/15_公众号_Yi昭.)
-
-我们学 LangChain 的组件层花了比较多时间，学编排层的 LCEL、LangGraph 都是很快的，一两节搞定。
-
-> 代码上传了课程仓库： https://github.com/QuarkGluonPlasma/ai-agent-course-code
-
-## 总结
-
-这节我们学了 LangGraph 和多 Agent 架构。
-
-我们理清了 3 个用多 Agent 架构的理由：
-
-- prompt 拆分到多个 Agent 中去，更纯净，token 消耗少，不容易决策出错
-- 多个 Agent 可以并行思考和执行任务
-- 多个 Agent 基于各自的角色可以相互讨论、纠错
-
-复杂的 Agent 产品基本都是多 Agent 架构。
-
-我们学了 LangGraph 的图怎么创建：
-
-- state 用 Annotation 创建，包括 default（默认值）、reducer（值怎么合并）
-- 图用 StateGraph 创建，可以添加 node（节点）、edge（边）
-- 边可以用 addConditionalEdges 添加路由分支，基于这个也可以实现循环
-- 可以用 MemorySaver 等 checkpointer 保存节点的 state，这样就可以恢复上次执行状态了
-- 用 interupt 可以做图执行过程的打断，之后再次 invoke 传入 resume Command 即可恢复执行
-
-还学了 prebuilt 的 ToolNode、toolsCondition 以及 createAgent 这些内置的节点、图
-
-学完 LangGraph 的图之后，我们学了多 Agent
-
-多 Agent 一般是 Supervisor - Worker 的架构
-
-直接用 langchain_langgraph-supervisor 这个包就行，它封装了这套架构。
-
-用 stream 可以看到图执行过程中的 state，分别用 updates、values 可以增量、全量看到节点输出的 state
-
-当然，打印太多的话可以直接用断点调试来看多 Agent 的流转过程。
-
-Supervisor 主管节点只负责任务分发，Worker 来做具体的任务执行。
-
-后面我们的项目实战都是基于这种多 Agent 的架构来写。
+可以将 Mermaid 代码复制到 https://mermaid.live 或 Markdown 的 ` ```mermaid ` 代码块中查看。
 
 ---
 
-**公众号：** 神光的幸福生活 | **作者：** 神说要有光 | **发布时间：** 2026-04-12 00:02:29 | **文章地址：** http://mp.weixin.qq.com/s?__biz=MzYzNzI2MTI2Nw==&mid=2247485805&idx=1&sn=24678fcc899c925d821daf3826a1597e&chksm=f1cc422c60f86b1045d39a0cc3e33bee8aa06b49bb74b1881eb54ea8a525a65d4b9c5051c59e&scene=27#wechat_redirect
+## 二、分支（Conditional Edges）
+
+图中当然有分支。用 `add_conditional_edges` 添加分支。
+
+创建 `conditional_routing.py`：
+
+```python
+"""
+conditional_routing.py - 条件分支示例
+"""
+import re
+from typing import TypedDict, Literal
+from langgraph.graph import StateGraph, START, END
+
+
+class State(TypedDict):
+    query: str
+    route: str
+    answer: str
+
+
+def router(state: State) -> State:
+    """路由节点：判断是数学问题还是聊天问题"""
+    is_math = bool(re.search(r'[+\-*/]', state['query']))
+    return {"route": "math" if is_math else "chat"}
+
+
+def math_node(state: State) -> State:
+    """数学节点：计算表达式"""
+    try:
+        result = eval(state['query'])
+        return {"answer": str(result)}
+    except Exception:
+        return {"answer": "表达式无法计算"}
+
+
+def chat_node(state: State) -> State:
+    """聊天节点：简单回复"""
+    return {"answer": f"你说的是：{state['query']}"}
+
+
+def route_condition(state: State) -> Literal["math", "chat"]:
+    """条件函数：返回下一个节点的名称"""
+    return state["route"]
+
+
+# 创建图
+graph = StateGraph(State)
+
+# 添加节点
+graph.add_node("router", router)
+graph.add_node("math", math_node)
+graph.add_node("chat", chat_node)
+
+# 添加边
+graph.add_edge(START, "router")
+
+# 添加条件边：根据 route 字段决定走哪个分支
+graph.add_conditional_edges(
+    "router",
+    route_condition,
+    {
+        "math": "math",
+        "chat": "chat",
+    }
+)
+
+graph.add_edge("math", END)
+graph.add_edge("chat", END)
+
+# 编译
+app = graph.compile()
+
+# 测试
+print("result:", app.invoke({"query": "你好"}))
+# 输出: {'query': '你好', 'route': 'chat', 'answer': '你说的是：你好'}
+
+print("result:", app.invoke({"query": "10 * 8"}))
+# 输出: {'query': '10 * 8', 'route': 'math', 'answer': '80'}
+```
+
+![条件分支](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/8_公众号_Yi昭.png)
+
+### 条件边 API
+
+```python
+graph.add_conditional_edges(
+    source_node,      # 源节点名称
+    condition_func,   # 条件函数，接收 state，返回下一个节点名称
+    {                 # 映射：条件函数返回值 -> 目标节点名称
+        "value1": "node1",
+        "value2": "node2",
+    }
+)
+```
+
+---
+
+## 三、循环（Loop）
+
+循环其实也是用分支来实现：条件满足就到 END，否则重新路由到之前的节点。
+
+创建 `loop_retry.py`：
+
+```python
+"""
+loop_retry.py - 循环重试示例
+"""
+from typing import TypedDict, Literal
+from langgraph.graph import StateGraph, START, END
+
+
+class State(TypedDict):
+    tries: int
+    ok: bool
+    message: str
+
+
+def attempt(state: State) -> State:
+    """尝试节点：模拟执行，第3次成功"""
+    tries = state["tries"] + 1
+    ok = tries >= 3
+    return {
+        "tries": tries,
+        "ok": ok,
+        "message": f"第 {tries} 次成功" if ok else f"第 {tries} 次失败，继续重试",
+    }
+
+
+def retry_condition(state: State) -> Literal["done", "retry"]:
+    """条件函数：成功就结束，否则重试"""
+    return "done" if state["ok"] else "retry"
+
+
+# 创建图
+graph = StateGraph(State)
+
+# 添加节点
+graph.add_node("attempt", attempt)
+
+# 添加边
+graph.add_edge(START, "attempt")
+
+# 添加条件边：成功就结束，否则回到 attempt 节点
+graph.add_conditional_edges(
+    "attempt",
+    retry_condition,
+    {
+        "retry": "attempt",  # 回到 attempt 节点，形成循环
+        "done": END,
+    }
+)
+
+# 编译
+app = graph.compile()
+
+# 执行
+result = app.invoke({"tries": 0})
+print("result:", result)
+# 输出: {'tries': 3, 'ok': True, 'message': '第 3 次成功'}
+```
+
+### 循环模式
+
+```
+START → attempt → 条件判断
+                ↓
+         ┌──────┴──────┐
+         ↓             ↓
+      retry          done
+         ↓             ↓
+      attempt        END
+```
+
+同样用 `add_conditional_edges` 判断条件满足就到 END 节点，否则重新路由到之前的节点，这样就可以实现循环效果。
+
+---
+
+## 四、状态保存（Checkpointer）
+
+经过这几个例子，应该能看出节点之间是通过 state 通信的。那把 state 保存下来不就是把当前图的执行状态保存下来了么？
+
+这个通过 Checkpointer 的 API 就可以保存。
+
+创建 `checkpointer_memory.py`：
+
+```python
+"""
+checkpointer_memory.py - 状态保存示例
+"""
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+
+
+class State(TypedDict):
+    visit_count: int
+    message: str
+
+
+def record_visit(state: State) -> State:
+    """记录访问：每跑一轮图，访问次数 +1"""
+    visit_count = state["visit_count"] + 1
+    if visit_count == 1:
+        message = "这是你在本会话里第 1 次进入。"
+    else:
+        message = f"这是你在本会话里第 {visit_count} 次进入"
+    return {"visit_count": visit_count, "message": message}
+
+
+# 创建图
+graph = StateGraph(State)
+graph.add_node("record_visit", record_visit)
+graph.add_edge(START, "record_visit")
+graph.add_edge("record_visit", END)
+
+# 使用 MemorySaver 保存状态到内存
+checkpointer = MemorySaver()
+app = graph.compile(checkpointer=checkpointer)
+
+# 不同用户的配置（thread_id 区分会话）
+user1 = {"configurable": {"thread_id": "用户-小张"}}
+user2 = {"configurable": {"thread_id": "用户-小李"}}
+
+# 用户1 执行3次
+res1 = app.invoke({}, user1)
+res2 = app.invoke({}, user1)
+res3 = app.invoke({}, user1)
+
+# 用户2 执行1次
+res4 = app.invoke({}, user2)
+
+print("用户1 第1次:", res1)  # visit_count: 1
+print("用户1 第2次:", res2)  # visit_count: 2
+print("用户1 第3次:", res3)  # visit_count: 3
+print("用户2 第1次:", res4)  # visit_count: 1
+```
+
+### Checkpointer 类型
+
+| Checkpointer | 说明 | 适用场景 |
+|--------------|------|----------|
+| `MemorySaver` | 保存到内存 | 开发测试、临时会话 |
+| `SqliteSaver` | 保存到 SQLite | 小型应用、单机部署 |
+| `PostgresSaver` | 保存到 PostgreSQL | 生产环境、分布式部署 |
+| `RedisSaver` | 保存到 Redis | 高性能、缓存场景 |
+
+我们用 `MemorySaver` 来把 state 保存到内存里，这样下次就会基于上次的 state 继续执行。
+
+---
+
+## 五、中断和恢复（Interrupt）
+
+我们用 Cursor 之类的 Coding Agent，它经常会让你确认，确认后再继续执行。这种打断功能咋做呢？
+
+LangGraph 提供了 `interrupt` 的 API。
+
+创建 `graph_interrupt.py`：
+
+```python
+"""
+graph_interrupt.py - 中断和恢复示例
+"""
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import interrupt, Command
+
+
+class State(TypedDict):
+    action_summary: str
+    user_input: str
+
+
+def show_transfer(state: State) -> State:
+    """展示一笔待确认的转账"""
+    return {"action_summary": "向张三转账 ¥100（模拟，不会真扣款）"}
+
+
+def wait_confirm(state: State) -> State:
+    """等待用户确认：中断图的执行，等待用户输入"""
+    # interrupt 会中断图的执行，返回 value 给调用方
+    # 用户恢复时传入的值会作为 interrupt 的返回值
+    user_input = interrupt({
+        "hint": "输入「确认」或备注后，图才会继续",
+        "action_summary": state["action_summary"],
+    })
+    return {"user_input": str(user_input)}
+
+
+# 创建图
+graph = StateGraph(State)
+graph.add_node("show_transfer", show_transfer)
+graph.add_node("wait_confirm", wait_confirm)
+graph.add_edge(START, "show_transfer")
+graph.add_edge("show_transfer", "wait_confirm")
+graph.add_edge("wait_confirm", END)
+
+# 编译（需要 checkpointer 才能中断）
+app = graph.compile(checkpointer=MemorySaver())
+
+# 配置
+config = {"configurable": {"thread_id": "interrupt-demo"}}
+
+# 第一次调用：图会在 interrupt 处暂停
+paused = app.invoke({}, config)
+print("\n待你确认：", paused.get("__interrupt__"))
+
+# 模拟用户输入
+user_input = input("> ").strip()
+if not user_input:
+    print("未输入，退出。")
+    exit(1)
+
+# 第二次调用：传入 Command(resume=...) 恢复执行
+done = app.invoke(Command(resume=user_input), config)
+print("结果：", done)
+```
+
+### 中断 API
+
+| API | 说明 |
+|-----|------|
+| `interrupt(value)` | 中断图的执行，返回 value 给调用方 |
+| `Command(resume=value)` | 恢复图的执行，value 作为 interrupt 的返回值 |
+| `__interrupt__` | 中断时返回的特殊字段，包含 interrupt 的 value |
+
+用 `interrupt` 中断图的执行，等待用户输入之后再次 `invoke`，传入 `Command(resume='xxx')`，这样图就会在上次断点位置继续执行。
+
+---
+
+## 六、预构建节点（Prebuilt）
+
+此外，有些常用的节点，LangGraph 给封装好了，放到 `prebuilt` 下。
+
+### ToolNode 和 toolsCondition
+
+创建 `prebuilt_tool_node.py`：
+
+```python
+"""
+prebuilt_tool_node.py - 预构建 ToolNode 示例
+"""
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.graph.message import MessagesState
+
+load_dotenv()
+
+
+# Mock 数据：模拟库存查询
+_inventory = {
+    "SKU-001": {"name": "无线鼠标", "stock": 42},
+    "SKU-002": {"name": "机械键盘", "stock": 7},
+    "SKU-003": {"name": "USB-C 线缆", "stock": 120},
+}
+
+
+@tool
+def get_product_stock(sku: str) -> str:
+    """
+    按 SKU 查商品名与库存，SKU 如 SKU-001。
+    """
+    key = sku.strip().upper()
+    row = _inventory.get(key)
+    if not row:
+        return f'{{"found": false, "sku": "{sku}"}}'
+    return f'{{"found": true, "sku": "{key}", "name": "{row["name"]}", "stock": {row["stock"]}}}'
+
+
+# 初始化模型并绑定工具
+tools = [get_product_stock]
+llm = ChatOpenAI(
+    model=os.getenv("MODEL_NAME", "qwen-plus"),
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+).bind_tools(tools)
+
+
+def agent(state: MessagesState) -> MessagesState:
+    """Agent 节点：调用大模型"""
+    response = llm.invoke(state["messages"])
+    return {"messages": response}
+
+
+# 使用预构建的 ToolNode
+tool_node = ToolNode(tools)
+
+# 创建图
+graph = StateGraph(MessagesState)
+graph.add_node("agent", agent)
+graph.add_node("tools", tool_node)
+
+graph.add_edge(START, "agent")
+
+# 使用预构建的 toolsCondition：有 tool_call 就走 tools，否则走 END
+graph.add_conditional_edges(
+    "agent",
+    tools_condition,
+    ["tools", END]
+)
+
+graph.add_edge("tools", "agent")
+
+# 编译
+app = graph.compile()
+
+# 执行
+result = app.invoke({
+    "messages": [
+        HumanMessage("查一下 SKU-001 的库存还有多少，回答里带上商品名和数字。")
+    ]
+})
+
+last = result["messages"][-1]
+print(last.content)
+```
+
+![预构建 ToolNode](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/9_公众号_Yi昭.png)
+
+### 预构建 API
+
+| API | 说明 |
+|-----|------|
+| `ToolNode(tools)` | 预构建的工具执行节点，自动处理 tool_calls |
+| `tools_condition` | 预构建的条件函数，有 tool_call 走 tools，否则走 END |
+| `MessagesState` | 预构建的状态，包含 `messages` 字段 |
+
+比如我们要调用 Tool，用图的写法需要创建 model 节点、tool 节点，然后加一个 conditional 节点判断。但不用自己写，LangGraph 内置了 `ToolNode` 和 `tools_condition` 的 API。
+
+---
+
+## 七、createAgent 预构建 Agent
+
+当然，像这么常用的 Agent Loop 自然也给封装好了，就是 `create_agent` 的 API。
+
+创建 `prebuilt_agent.py`：
+
+```python
+"""
+prebuilt_agent.py - create_agent 预构建 Agent 示例
+"""
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+
+load_dotenv()
+
+
+# Mock 数据
+_inventory = {
+    "SKU-001": {"name": "无线鼠标", "stock": 42},
+    "SKU-002": {"name": "机械键盘", "stock": 7},
+    "SKU-003": {"name": "USB-C 线缆", "stock": 120},
+}
+
+
+@tool
+def get_product_stock(sku: str) -> str:
+    """按 SKU 查商品名与库存，SKU 如 SKU-001。"""
+    key = sku.strip().upper()
+    row = _inventory.get(key)
+    if not row:
+        return f'{{"found": false, "sku": "{sku}"}}'
+    return f'{{"found": true, "sku": "{key}", "name": "{row["name"]}", "stock": {row["stock"]}}}'
+
+
+# 初始化模型
+model = ChatOpenAI(
+    model=os.getenv("MODEL_NAME", "qwen-plus"),
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+)
+
+# 使用 create_react_agent 创建 Agent
+agent = create_react_agent(
+    model,
+    tools=[get_product_stock],
+    state_modifier="你是仓库助手。问库存时必须调用 get_product_stock（模拟数据），禁止编造。",
+    checkpointer=MemorySaver(),
+)
+
+# 执行
+result = agent.invoke(
+    {"messages": [HumanMessage("SKU-002 还剩多少库存？")]},
+    {"configurable": {"thread_id": "demo-thread"}}
+)
+
+last = result["messages"][-1]
+print(last.content)
+```
+
+![create_agent 内部图](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/10_公众号_Yi昭.png)
+
+直接用 `create_react_agent` 来跑 Agent Loop。看一下它的图，和刚才写的一样，这个 API 内部就是基于 LangGraph 构建的 Agent Loop 的图。
+
+### create_react_agent 参数
+
+| 参数 | 说明 |
+|------|------|
+| `model` | 大语言模型 |
+| `tools` | 工具列表 |
+| `state_modifier` | 系统提示词或状态修改函数 |
+| `checkpointer` | 状态保存器（可选） |
+| `debug` | 是否开启调试模式 |
+
+---
+
+## 八、多 Agent 架构（Supervisor-Worker 模式）
+
+学完 LangGraph 的图，我们来写一个多 Agent 的架构。
+
+多 Agent 最常用的是 **Supervisor - Worker 模式**，也就是"主管 - 工人"模式。
+
+![Supervisor-Worker 模式](../IMG/2026-04-12_图编排引擎：LangGraph和多Agent架构/11_公众号_Yi昭.png)
+
+```
+                    ┌─────────────┐
+                    │  Supervisor │
+                    │   (主管)     │
+                    └──────┬──────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────┐
+        │ Worker A │ │ Worker B │ │ Worker C │
+        │ (天气)    │ │ (小知识)  │ │ (搜索)    │
+        └──────────┘ └──────────┘ └──────────┘
+```
+
+### 安装依赖
+
+```bash
+pip install langgraph langchain langchain-openai
+```
+
+### 完整实现
+
+创建 `multi_agent_supervisor.py`：
+
+```python
+"""
+multi_agent_supervisor.py - 多 Agent Supervisor-Worker 模式
+"""
+import os
+from typing import Literal
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import create_react_agent
+from langgraph.types import Command
+from langgraph.graph.message import MessagesState
+
+load_dotenv()
+
+
+# ============ Mock 数据和工具 ============
+
+@tool
+def lookup_weather(city: str) -> str:
+    """查询某城市当日天气概况（气温区间、天气、空气质量等）。"""
+    weather_data = {
+        "杭州": {"temp": "18-25°C", "weather": "晴", "aqi": "良"},
+        "北京": {"temp": "10-20°C", "weather": "多云", "aqi": "轻度污染"},
+        "上海": {"temp": "20-28°C", "weather": "阴", "aqi": "优"},
+    }
+    data = weather_data.get(city, {"temp": "未知", "weather": "未知", "aqi": "未知"})
+    return f"{city}天气：气温 {data['temp']}，{data['weather']}，空气质量 {data['aqi']}"
+
+
+@tool
+def lookup_city_trivia(city: str) -> str:
+    """查询与某城市相关的一句趣味知识。"""
+    trivia = {
+        "杭州": "杭州西湖是中国唯一一个湖泊类世界文化遗产。",
+        "北京": "北京故宫是世界上现存规模最大、保存最为完整的木质结构古建筑之一。",
+        "上海": "上海外滩的万国建筑博览群汇集了52幢风格迥异的古典复兴大楼。",
+    }
+    return trivia.get(city, f"暂无关于{city}的趣味知识。")
+
+
+# ============ 初始化模型 ============
+
+model = ChatOpenAI(
+    model=os.getenv("MODEL_NAME", "qwen-plus"),
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+)
+
+
+# ============ 创建子 Agent ============
+
+# 子 Agent A：只回答天气类问题
+weather_agent = create_react_agent(
+    model,
+    tools=[lookup_weather],
+    state_modifier="你只处理天气。用户提到城市时，用 lookup_weather 查询后再用中文简短说明。",
+)
+
+# 子 Agent B：只回答城市小知识
+trivia_agent = create_react_agent(
+    model,
+    tools=[lookup_city_trivia],
+    state_modifier="你只处理与城市相关的小知识。用 lookup_city_trivia 查询后用中文简短说明。",
+)
+
+
+# ============ Supervisor 节点 ============
+
+def supervisor_node(state: MessagesState) -> Command:
+    """
+    Supervisor 节点：分析用户问题，决定调用哪个子 Agent
+    """
+    messages = state["messages"]
+    user_query = messages[-1].content if messages else ""
+
+    # 简单的路由逻辑（实际可用大模型判断）
+    if any(kw in user_query for kw in ["天气", "气温", "下雨", "晴天", "温度"]):
+        next_agent = "weather_agent"
+    elif any(kw in user_query for kw in ["小知识", "趣味", "知识", "介绍"]):
+        next_agent = "trivia_agent"
+    else:
+        # 默认都问一下
+        next_agent = "weather_agent"
+
+    return Command(goto=next_agent)
+
+
+# ============ 子 Agent 包装节点 ============
+
+def weather_agent_node(state: MessagesState) -> MessagesState:
+    """天气 Agent 节点"""
+    result = weather_agent.invoke(state)
+    return {"messages": result["messages"]}
+
+
+def trivia_agent_node(state: MessagesState) -> MessagesState:
+    """小知识 Agent 节点"""
+    result = trivia_agent.invoke(state)
+    return {"messages": result["messages"]}
+
+
+# ============ 汇总节点 ============
+
+def summarize_node(state: MessagesState) -> MessagesState:
+    """汇总节点：整合子 Agent 的回答"""
+    messages = state["messages"]
+    # 取最后一条消息作为汇总结果
+    last_message = messages[-1]
+    summary = f"【汇总】\n{last_message.content}"
+    return {"messages": [HumanMessage(content=summary)]}
+
+
+# ============ 构建图 ============
+
+graph = StateGraph(MessagesState)
+
+# 添加节点
+graph.add_node("supervisor", supervisor_node)
+graph.add_node("weather_agent", weather_agent_node)
+graph.add_node("trivia_agent", trivia_agent_node)
+graph.add_node("summarize", summarize_node)
+
+# 添加边
+graph.add_edge(START, "supervisor")
+
+# Supervisor 到子 Agent 的条件边
+graph.add_conditional_edges(
+    "supervisor",
+    lambda state: state.get("next", "weather_agent"),
+    {
+        "weather_agent": "weather_agent",
+        "trivia_agent": "trivia_agent",
+    }
+)
+
+# 子 Agent 到汇总节点
+graph.add_edge("weather_agent", "summarize")
+graph.add_edge("trivia_agent", "summarize")
+
+# 汇总节点到 END
+graph.add_edge("summarize", END)
+
+# 编译
+app = graph.compile()
+
+
+# ============ 测试 ============
+
+if __name__ == "__main__":
+    # 测试天气查询
+    result1 = app.invoke({
+        "messages": [HumanMessage("杭州今天天气怎么样？")]
+    })
+    print("天气查询结果:", result1["messages"][-1].content)
+    print()
+
+    # 测试小知识查询
+    result2 = app.invoke({
+        "messages": [HumanMessage("给我讲一个北京的小知识")]
+    })
+    print("小知识查询结果:", result2["messages"][-1].content)
+```
+
+### Supervisor-Worker 模式要点
+
+| 角色 | 职责 |
+|------|------|
+| **Supervisor（主管）** | 接收用户问题，分析意图，分派任务给子 Agent |
+| **Worker（工人）** | 专注于特定领域的任务，只带必要的工具和 Prompt |
+| **Summarizer（汇总）** | 整合子 Agent 的结果，生成最终回答 |
+
+### 多 Agent 的优势
+
+1. **职责分离**：每个 Agent 只负责一个领域，Prompt 更精简
+2. **并行处理**：多个子 Agent 可以并行执行任务
+3. **易于扩展**：新增功能只需添加新的子 Agent
+4. **容错性强**：某个子 Agent 失败不影响其他 Agent
+
+---
+
+## 学习要点
+
+1. **LangGraph** 是 LangChain 的图编排引擎，用于构建复杂的 Agent 工作流
+2. **核心概念**：State（状态）、Node（节点）、Edge（边）、START、END
+3. **条件边** `add_conditional_edges` 实现分支逻辑，根据 state 决定下一个节点
+4. **循环**也是用条件边实现：条件不满足就回到之前的节点
+5. **Checkpointer** 保存图的执行状态，支持会话持久化（MemorySaver/SqliteSaver/PostgresSaver）
+6. **Interrupt** 实现图的中断和恢复，用于需要用户确认的场景
+7. **预构建节点**：`ToolNode`、`toolsCondition` 简化 Tool Calling 的图构建
+8. **create_react_agent** 一键创建 ReAct Agent，内部基于 LangGraph 构建 Agent Loop
+9. **多 Agent 架构**最常用 Supervisor-Worker 模式，主管分派任务，子 Agent 并行处理
+10. **多 Agent 的优势**：职责分离、并行处理、易于扩展、容错性强
+
+## 扩展方向
+
+- 学习 LangGraph 的子图（Subgraph）嵌套调用
+- 探索 LangGraph 的并行执行（Send API）
+- 学习 LangGraph 的流式输出（stream_mode）
+- 实现更复杂的多 Agent 协作（如辩论模式、评审模式）
+- 集成 LangSmith 进行图的追踪和调试
+- 学习 LangGraph 的 Human-in-the-loop 模式
+- 探索 LangGraph 的持久化存储（Postgres/Redis）
+- 实现多 Agent 的任务队列和调度
+
+---
+
+## 配套代码库
+
+**代码库地址**：https://github.com/iiixiyan/agent-learning-code/tree/main/02-enterprise-backend/25-langgraph-multi-agent
+
+包含本文的完整可运行代码示例（LangGraph 基础、分支、循环、状态保存、中断恢复、预构建节点、多 Agent 架构）。
+
+---
+
+**上一篇**：[AGUI 协议](./24_AGUI协议.md) | **下一篇**：[Agentic RAG](./26_Agentic-RAG.md)
