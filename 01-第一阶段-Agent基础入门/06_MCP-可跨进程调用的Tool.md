@@ -1,275 +1,358 @@
 # MCP：可跨进程调用的 Tool
 
-> **Python 版** | 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 技术栈
+> **Python 版** | 基于 FastAPI + LangChain Python 技术栈
 
 ---
 
-神光的幸福生活 2025年12月24日 08:10
+## 为什么需要 MCP？
 
-我们已经写了一些 tool 了：读写文件和目录、执行命令
+我们已经写了一些 Tool 了：读写文件和目录、执行命令。
 
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/0_公众号_Yi昭.png)
+只要声明 Tool 的名字、描述、参数格式，模型会在发现需要用 Tool 的时候自动解析出参数传入来调用，然后把执行结果封装成 ToolMessage 传入对话。
 
-只要声明 tool 的名字、描述、参数格式，模型会在发现需要用 tool 的时候自动解析出参数传入来调用，然后把执行结果封装成 ToolMessage 传入 chat。
+比如上节我们实现了简易的 Cursor，就是声明了读写文件和目录、执行命令的 Tool，这样你让大模型创建 React + Vite 项目，它就会自动判断什么时候调用哪个 Tool，自动实现目录、文件的创建，以及 `pip install` 和 `python run` 的执行。
 
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/1_公众号_Yi昭.png)
+我们只是告诉它要创建的项目，然后安装依赖跑起来。这些 Tool 怎么调用、参数是什么都是大模型自己决定的。
 
-比如上节我们实现了简易的 cursor，就是声明了读写文件和目录、执行命令的 tool，这样你让大模型创建 react + vite 项目，它就会自动判断什么时候调用哪个 tool，自动实现目录、文件的创建，以及 ppip install 和 pnpn run dev 的执行。
+**Tool 给大模型扩展了做事情的能力**：本来它只能思考，不能做事情，但是现在可以自己调用 Tool 来帮你做事情了。
 
-> 🎬 视频演示（原公众号视频）
+## Tool 的局限性
 
-我们只是告诉他要创建的项目，然后安装依赖跑起来。
+但你有没有发现 Tool 有个问题：
 
-这些 tool 怎么调用、参数是什么都是大模型自己决定的。
+Python 写的 AI Agent 代码，你的 Tool 也得是 Python 写的。
 
-tool 给大模型扩展了做事情的能力，本来它只能思考，不能做事情，但是现在可以自己调用 tool 来帮你做事情了。
+如果你之前有一些工具是 Java、Rust、Go 写的呢？你想封装成 Tool 怎么办呢？
 
-但你有没有发现 tool 有个问题：
-
-python 写的 ai agent 的代码，你的 tool 也得是 python 写。
-
-如果你之前有一些工具是 java、python、rust 写的呢？
-
-你想封装成 tool 怎么办呢？
+### 方案一：通过子进程调用
 
 有的同学说：现在不是可以执行命令么，通过单独进程把这些其他语言写的代码跑一下就行啊。
 
 确实，也就是这样：
 
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/2_公众号_Yi昭.png)
+```
+AI Agent (Python)
+    ↓ stdio (标准输入输出)
+子进程 (Java/Rust/Go 写的工具)
+```
 
 这里的 stdio 就是标准输入输出流，也就是键盘输入、控制台输出。当你进程跑一个子进程，就可以用这种方式通信。
 
-还有的同学说：简单，用 http 啊！本地跑个服务就好了。
+### 方案二：通过 HTTP 调用
 
-也就是这样：
+还有的同学说：简单，用 HTTP 啊！本地跑个服务就好了。
 
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/3_公众号_Yi昭.png)
+```
+AI Agent (Python)
+    ↓ HTTP 请求
+本地/远程服务 (任意语言写的工具)
+```
 
 现在是解决了跨语言调用工具的问题。
 
-那如果每个人都这样搞，它们提供的服务都不一样，我想接入别的 tool，是不是要了解每个服务都是怎么定义的呢？
+## 统一协议的必要性
+
+那如果每个人都这样搞，它们提供的服务都不一样，我想接入别的 Tool，是不是要了解每个服务都是怎么定义的呢？
 
-能不能定义一个统一的通信协议，我们都按照这个格式来沟通，这样所有的跨进程工具调用就都可以接入了。
+**能不能定义一个统一的通信协议，我们都按照这个格式来沟通，这样所有的跨进程工具调用就都可以接入了。**
+
+```
+AI Agent (MCP Client)
+    ↓ MCP 协议 (stdio / http)
+各种 MCP Server (任意语言)
+```
+
+想跨进程调用某个工具，通过这个协议通信就行。不管是本地工具，直接跑那个进程，然后 stdio 通信；还是远程工具，通过 HTTP 连接远程服务进程。
+
+**这个协议就叫 MCP（Model Context Protocol）**——给 Model 扩展 Context 上下文，让它能做的更多、知道的更多的协议。
+
+## MCP 核心概念
+
+MCP 最大的特点就是可以**跨进程调用工具**：
+
+- 跨本地的进程调用，就是用 **stdio**
+- 跨远程的进程调用，就是用 **HTTP**
+
+### MCP 架构图
 
-也就是这样：
+```
+┌─────────────────────────────────────────┐
+│           AI Agent (MCP Client)          │
+│  (Cursor / LangChain / Claude Desktop)  │
+└──────────────┬──────────────────────────┘
+               │ MCP 协议
+    ┌──────────┼──────────┐
+    ↓          ↓          ↓
+┌───────┐ ┌───────┐ ┌───────┐
+│MCP    │ │MCP    │ │MCP    │
+│Server1│ │Server2│ │Server3│
+│(Python)│ │(Node) │ │(Rust) │
+└───────┘ └───────┘ └───────┘
+```
+
+你的 AI Agent 就是 MCP 客户端，可以通过 MCP 协议调用各种 MCP Server，实现跨进程的工具调用。
+
+当然，在 LangChain 里，它也是 Tool，只不过是 Tool 的一种而已。
+
+> MCP 由 AI 巨头 Anthropic 公司发起并开发，2025 年 12 月交给了 Linux 基金会维护。也就是说它现在是完全中立于任何一个模型的行业通用协议。
+
+## 实战：用 Python 写一个 MCP Server
+
+继续在 tool-test 项目里写。
+
+### 安装依赖
+
+```bash
+pip install mcp langchain-mcp-adapters
+```
+
+### 创建 MCP Server
+
+创建 `src/my_mcp_server.py`：
+
+```python
+"""
+MCP Server 示例：提供用户查询工具和使用指南资源
+"""
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent, Resource
+import asyncio
+
+# 模拟数据库
+database = {
+    "users": {
+        "001": {"id": "001", "name": "张三", "email": "zhangsan@example.com", "role": "admin"},
+        "002": {"id": "002", "name": "李四", "email": "lisi@example.com", "role": "user"},
+        "003": {"id": "003", "name": "王五", "email": "wangwu@example.com", "role": "user"},
+    }
+}
 
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/4_公众号_Yi昭.png)
+# 创建 MCP Server 实例
+server = Server("my-mcp-server")
 
-想跨进程调用某个工具，通过这个协议通信就行。
 
-不管是本地工具，直接跑那个进程，然后 stdio 通信。
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    """列出可用的工具"""
+    return [
+        Tool(
+            name="query_user",
+            description="查询数据库中的用户信息。输入用户 ID，返回该用户的详细信息（姓名、邮箱、角色）。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "userId": {
+                        "type": "string",
+                        "description": "用户 ID，例如: 001, 002, 003"
+                    }
+                },
+                "required": ["userId"]
+            }
+        )
+    ]
 
-还是远程工具，通过 http 连接远程服务进程。
 
-这个协议叫什么呢？
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    """调用工具"""
+    if name == "query_user":
+        user_id = arguments.get("userId", "")
+        user = database["users"].get(user_id)
+
+        if not user:
+            return [TextContent(
+                type="text",
+                text=f"用户 ID {user_id} 不存在。可用的 ID: 001, 002, 003"
+            )]
+
+        return [TextContent(
+            type="text",
+            text=f"用户信息：\n- ID: {user['id']}\n- 姓名: {user['name']}\n- 邮箱: {user['email']}\n- 角色: {user['role']}"
+        )]
+
+    return [TextContent(type="text", text=f"未知工具: {name}")]
+
+
+@server.list_resources()
+async def list_resources() -> list[Resource]:
+    """列出可用的资源（静态数据）"""
+    return [
+        Resource(
+            uri="docs://guide",
+            name="使用指南",
+            description="MCP Server 使用文档",
+            mimeType="text/plain"
+        )
+    ]
+
+
+@server.read_resource()
+async def read_resource(uri: str) -> str:
+    """读取资源内容"""
+    if uri == "docs://guide":
+        return """MCP Server 使用指南
+
+功能：提供用户查询等工具。
+使用：在 Cursor 等 MCP Client 中通过自然语言对话，Client 会自动调用相应工具。
+"""
+    return ""
+
+
+async def main():
+    """启动 MCP Server（stdio 模式）"""
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**代码解析**：
+
+- `Server` 创建了 MCP Server 实例
+- `@server.list_tools()` 注册工具列表，声明 name、description、inputSchema
+- `@server.call_tool()` 处理工具调用
+- `@server.list_resources()` / `@server.read_resource()` 注册资源（静态数据）
+- `stdio_server()` 提供 stdio 的本地进程通信方式
+
+> Resource 和 Tool 的区别：Resource 一般返回静态数据（read），Tool 来做一些事情（call）。
+
+运行 MCP Server：
+
+```bash
+python src/my_mcp_server.py
+```
+
+这样，我们的 MCP 服务就创建好了！其实就是 Tool，加上了协议而已。
 
-是给 Model 扩展 Context 上下文，让它能做的更多，知道的更多的 Protocal 协议。
+## 在 LangChain 中调用 MCP Server
+
+创建 `src/langchain_mcp_test.py`：
 
-就叫 MCP 吧。
+```python
+"""
+LangChain 调用 MCP Server 示例
+"""
+import os
+import asyncio
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage
 
-恭喜你，你发明了 MCP！
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/5_公众号_Yi昭.png)
-
-MCP 最大的特点就是可以**跨进程调用工具**。
-
-跨本地的进程调用，就是用 stdio。
-
-跨远程的进程调用，就是用 http。
-
-提到 MCP 都会提到这张图：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/6_公众号_Yi昭.png)
-
-你的 ai agent 就是 MCP 客户端，可以通过 MCP 协议调用各种 MCP Server，实现跨进程的工具调用。
-
-当然，在 langchain 里，它也是 tool ，只不过是 tool 的一种而已：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/7_公众号_Yi昭.png)
-
-MCP 是由 AI 巨头 Anthropic 公司发起并开发，但是 2025 年 12 月交给了 Linux 基金会维护。
-
-也就是说它现在是完全中立于任何一个模型的行业通用协议。
-
-大概知道 MCP 是啥就行，我们自己来写个 MCP 服务就明白了。
-
-继续在 tool-test 这个项目里写：
-
-安装 mcp 的包：
-
-    ppip install @modelcontextprotocol/sdk
-
-从包名就可以看出来是中立于任何一家公司的。
-
-创建 src/my-mcp-server.mjs
-
-    import&nbsp;{ McpServer }&nbsp;from'@modelcontextprotocol/sdk/server/mcp.js';import&nbsp;{ StdioServerTransport }&nbsp;from'@modelcontextprotocol/sdk/server/stdio.js';import&nbsp;{ z }&nbsp;from'zod';// 数据库const&nbsp;database = {users: {&nbsp; &nbsp;&nbsp;'001': {&nbsp;id:&nbsp;'001',&nbsp;name:&nbsp;'张三',&nbsp;email:&nbsp;'zhangsan@example.com',&nbsp;role:&nbsp;'admin'&nbsp;},&nbsp; &nbsp;&nbsp;'002': {&nbsp;id:&nbsp;'002',&nbsp;name:&nbsp;'李四',&nbsp;email:&nbsp;'lisi@example.com',&nbsp;role:&nbsp;'user'&nbsp;},&nbsp; &nbsp;&nbsp;'003': {&nbsp;id:&nbsp;'003',&nbsp;name:&nbsp;'王五',&nbsp;email:&nbsp;'wangwu@example.com',&nbsp;role:&nbsp;'user'&nbsp;},&nbsp; }};const&nbsp;server =&nbsp;new&nbsp;McpServer({name:&nbsp;'my-mcp-server',version:&nbsp;'1.0.0',});// 注册工具：查询用户信息server.registerTool('query_user', {description:&nbsp;'查询数据库中的用户信息。输入用户 ID，返回该用户的详细信息（姓名、邮箱、角色）。',inputSchema: {&nbsp; &nbsp;&nbsp;userId: z.string().describe('用户 ID，例如: 001, 002, 003'),&nbsp; },},&nbsp;async&nbsp;({ userId }) =&gt; {const&nbsp;user = database.users[userId];if&nbsp;(!user) {&nbsp; &nbsp;&nbsp;return&nbsp;{&nbsp; &nbsp; &nbsp;&nbsp;content: [&nbsp; &nbsp; &nbsp; &nbsp; {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;type:&nbsp;'text',&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;text:&nbsp;`用户 ID&nbsp;${userId}&nbsp;不存在。可用的 ID: 001, 002, 003`,&nbsp; &nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; &nbsp; ],&nbsp; &nbsp; };&nbsp; }return&nbsp;{&nbsp; &nbsp;&nbsp;content: [&nbsp; &nbsp; &nbsp; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;type:&nbsp;'text',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;text:&nbsp;`用户信息：\n- ID:&nbsp;${user.id}\n- 姓名:&nbsp;${user.name}\n- 邮箱:&nbsp;${user.email}\n- 角色:&nbsp;${user.role}`,&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; ],&nbsp; };});server.registerResource('使用指南',&nbsp;'docs://guide', {description:&nbsp;'MCP Server 使用文档',mimeType:&nbsp;'text/plain',},&nbsp;async&nbsp;() =&gt; {return&nbsp;{&nbsp; &nbsp;&nbsp;contents: [&nbsp; &nbsp; &nbsp; {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;uri:&nbsp;'docs://guide',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;mimeType:&nbsp;'text/plain',&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;text:&nbsp;`MCP Server 使用指南功能：提供用户查询等工具。使用：在 Cursor 等 MCP Client 中通过自然语言对话，Cursor 会自动调用相应工具。`,&nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; ],&nbsp; };});const&nbsp;transport =&nbsp;new&nbsp;StdioServerTransport();await&nbsp;server.connect(transport); &nbsp; &nbsp;
-
-代码很容易看懂：
-
-- new McpServer 创建了 mcp server 实例
-- server.registerTool 注册了一个工具，声明 name、description、schema
-- server.registerResource 注册了一个资源，就是静态数据
-
-和我们写 tool 的时候差不多，只不过这里分了 resource 和 tool，resouce 一般返回静态数据，tool 来做一些事情。
-
-最后，可以提供 stdio 的本地进程的调用方式，也可以提供 http 的远程调用方式。
-
-这里是 stdio 的传输方式（Transport）
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/8_公众号_Yi昭.png)
-
-这样，我们的 MCP 服务就创建好了！
-
-是不是很简单。
-
-其实就是 tool，加上了协议而已。
-
-我们在 cursor 里配置下这个 mcp server：
-
-> 🎬 视频演示（原公众号视频）
-
-配置好之后测试下：
-
-> 🎬 视频演示（原公众号视频）
-
-我特意换了个项目来测。
-
-可以看到，确实检测到了这个 mcp 然后调用了！
-
-这里 cursor 有个坑注意下：
-
-> 🎬 视频演示（原公众号视频）
-
-点一下 tool 是禁用，再点一下是启用。
-
-但是 cursor 这个状态颜色区分不明显，没有调用 mcp 工具，可能你关掉了。
-
-**这就是 mcp 的好处，写好之后可以插拔到任何地方当 tool 用。**
-
-那 resource 呢？
-
-它其实不是用来作为 tool 触发的，主要是你可以引用用来写 prompt 之类的。
-
-比如这样：
-
-> 🎬 视频演示（原公众号视频）
-
-resource 主要是查询信息用的（read）， 而 tool 是执行功能用的（call）
-
-当然，因为有了 mcp，除了 cursor，别的软件同样可以调用这个服务：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/9_公众号_Yi昭.png)
-
-我们在 langchain 代码里调用下 mcp server：
-
-用这个包：
-
-    ppip install langchain_mcp-adapters
-
-创建 src/langchain-mcp-test.mjs
-
-    import&nbsp;'dotenv/config';import&nbsp;{ MultiServerMCPClient }&nbsp;from'langchain_mcp-adapters';import&nbsp;{ ChatOpenAI }&nbsp;from'langchain_openai';import&nbsp;chalk&nbsp;from'chalk';import&nbsp;{ HumanMessage, ToolMessage }&nbsp;from'langchain_core/messages';const&nbsp;model =&nbsp;new&nbsp;ChatOpenAI({&nbsp;&nbsp; &nbsp;&nbsp;modelName:&nbsp;"qwen-plus",&nbsp; &nbsp;&nbsp;apiKey: process.env.OPENAI_API_KEY,&nbsp; &nbsp;&nbsp;configuration: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;baseURL: process.env.OPENAI_BASE_URL,&nbsp; &nbsp; },});const&nbsp;mcpClient =&nbsp;new&nbsp;MultiServerMCPClient({&nbsp; &nbsp;&nbsp;mcpServers: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'my-mcp-server': {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;command:&nbsp;"node",&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;args: [&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;"/Users/guang/code/tool-test/src/my-mcp-server.mjs"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ]&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; }});const&nbsp;tools =&nbsp;await&nbsp;mcpClient.getTools();const&nbsp;modelWithTools = model.bindTools(tools);asyncfunction&nbsp;runAgentWithTools(query, maxIterations =&nbsp;30)&nbsp;{&nbsp; &nbsp;&nbsp;const&nbsp;messages = [&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;new&nbsp;HumanMessage(query)&nbsp; &nbsp; ];&nbsp; &nbsp;&nbsp;for&nbsp;(let&nbsp;i =&nbsp;0; i &lt; maxIterations; i++) {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(chalk.bgGreen(`⏳ 正在等待 AI 思考...`));&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;response =&nbsp;await&nbsp;modelWithTools.invoke(messages);&nbsp; &nbsp; &nbsp; &nbsp; messages.push(response);&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;// 检查是否有工具调用&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!response.tool_calls || response.tool_calls.length ===&nbsp;0) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(`\n✨ AI 最终回复:\n${response.content}\n`);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return&nbsp;response.content;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(chalk.bgBlue(`🔍 检测到&nbsp;${response.tool_calls.length}&nbsp;个工具调用`));&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(chalk.bgBlue(`🔍 工具调用:&nbsp;${response.tool_calls.map(t =&gt; t.name).join(', ')}`));&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;// 执行工具调用&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;for&nbsp;(const&nbsp;toolCall&nbsp;of&nbsp;response.tool_calls) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;foundTool = tools.find(t&nbsp;=&gt;&nbsp;t.name === toolCall.name);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(foundTool) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;toolResult =&nbsp;await&nbsp;foundTool.invoke(toolCall.args);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; messages.push(new&nbsp;ToolMessage({&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;content: toolResult,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;tool_call_id: toolCall.id,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }));&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; }&nbsp; &nbsp;&nbsp;return&nbsp;messages[messages.length -&nbsp;1].content;}await&nbsp;runAgentWithTools("查一下用户 002 的信息");
-
-我们用 langchain_mcp-adapters 创建了 mcp client
-
-写法和 cursor 里配置一样：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/10_公众号_Yi昭.png)
-
-就是用命令行启动这个进程，之后用 stdio 的方式做通信。
-
-拿到 tools 之后绑定到模型。
-
-模型调用返回 tool\_calls 消息需要自己调用 tool，调用完通过 ToolMessage 封装返回的消息，继续调用。
-
-这个循环我们写过很多次了。
-
-调用下试试：
-
-> 🎬 视频演示（原公众号视频）
-
-可以看到，你让大模型查询用户，它识别到了工具调用，然后调用了 mcp 的工具。
-
-这里进程没退出，因为你跑了一个子进程作为 mcp server，需要把那个关掉才可以：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/11_公众号_Yi昭.png)
-
-    await&nbsp;mcpClient.close();
-
-> 🎬 视频演示（原公众号视频）
-
-那 resource 怎么用呢？
-
-那种静态信息可以放到 system message 里。
-
-我们先查一下 resource：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/12_公众号_Yi昭.png)
-
-    const&nbsp;res =&nbsp;await&nbsp;mcpClient.listResources();console.log(res);
-
-> 🎬 视频演示（原公众号视频）
-
-遍历依次读取 uri 内容
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/13_公众号_Yi昭.png)
-
-    const&nbsp;res =&nbsp;await&nbsp;mcpClient.listResources();for&nbsp;(const&nbsp;[serverName, resources]&nbsp;of&nbsp;Object.entries(res)) {&nbsp; &nbsp;&nbsp;for&nbsp;(const&nbsp;resource&nbsp;of&nbsp;resources) {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;content =&nbsp;await&nbsp;mcpClient.readResource(serverName, resource.uri);&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(content);&nbsp; &nbsp; }}
-
-> 🎬 视频演示（原公众号视频）
-
-然后只要把它放到 system message 里作为上下文就好了：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/14_公众号_Yi昭.png)
-
-    const&nbsp;res =&nbsp;await&nbsp;mcpClient.listResources();let&nbsp;resourceContent =&nbsp;'';for&nbsp;(const&nbsp;[serverName, resources]&nbsp;of&nbsp;Object.entries(res)) {&nbsp; &nbsp;&nbsp;for&nbsp;(const&nbsp;resource&nbsp;of&nbsp;resources) {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;content =&nbsp;await&nbsp;mcpClient.readResource(serverName, resource.uri);&nbsp; &nbsp; &nbsp; &nbsp; resourceContent += content[0].text;&nbsp; &nbsp; }}
-
-    const&nbsp;messages = [&nbsp; &nbsp;&nbsp;new&nbsp;SystemMessage(resourceContent),&nbsp; &nbsp;&nbsp;new&nbsp;HumanMessage(query)];
-
-调用下：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/15_公众号_Yi昭.png)
-
-    await&nbsp;runAgentWithTools("MCP Server 的使用指南是什么");
-
-跑一下：
-
-> 🎬 视频演示（原公众号视频）
-
-现在，大模型就知道这个 resource 的信息，可以用来回答问题了。
-
-resource 可以用在 system message 里，也可以用在 human message 里，总之，是作为信息引用的。
-
-我们主要还是用 mcp 的 tools。
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/16_公众号_Yi昭.png)
-
-这样，我们就写了一个 mcp server，并分别在 cursor、langchain 里用了这个 mcp server。
-
-mcp 本质上还是 tool，和之前的 tool 的区别只不过是可以跨进程调用：
-
-![image](../IMG/2025-12-24_MCP：可跨进程调用的Tool/17_公众号_Yi昭.png)
-
-当你不需要跨进程用的时候，还是之前那样写更好，还少了进程通信的成本。
-
-> 代码上传了课程仓库： https://github.com/QuarkGluonPlasma/ai-agent-course-code/tool-test
-
-## 总结
-
-这节我们学了 MCP，它是可跨进程调用的 Tool。
-
-可以是本地进程，用 stdio 进程通信。
-
-可以是远程进程，用 http 通信。
-
-在 langchain 里用 langchain_mcp-adapters 封装成 tools 来用，其实和其他 tool 没区别。
-
-跨进程就意味着不限语言，开发好之后，可以被任意 mcp client 调用，比如 cursor、langchain 等。
-
-除了自己写 mcp server，现在也有很多现成的 mcp server 可以直接用，下节我们来用一下。
+load_dotenv()
+
+
+async def main():
+    # 1. 初始化大模型
+    model = ChatOpenAI(
+        model=os.getenv("MODEL_NAME", "qwen-plus"),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+        temperature=0,
+    )
+
+    # 2. 创建 MCP Client，连接到 MCP Server
+    mcp_client = MultiServerMCPClient({
+        "my-mcp-server": {
+            "command": "python",
+            "args": [os.path.join(os.path.dirname(__file__), "my_mcp_server.py")]
+        }
+    })
+
+    # 3. 获取 MCP 工具并绑定到模型
+    async with mcp_client as client:
+        tools = await client.get_tools()
+        model_with_tools = model.bind_tools(tools)
+
+        # 4. 读取 Resource（可选，放入 SystemMessage）
+        resources = await client.list_resources()
+        resource_content = ""
+        for server_name, res_list in resources.items():
+            for res in res_list:
+                content = await client.read_resource(server_name, res.uri)
+                resource_content += content[0].text + "\n"
+
+        # 5. 运行 Agent
+        messages = [
+            SystemMessage(content=resource_content) if resource_content else SystemMessage(content=""),
+            HumanMessage(content="查一下用户 002 的信息")
+        ]
+
+        max_iterations = 10
+        for i in range(max_iterations):
+            print(f"\n=== 第 {i + 1} 步 ===")
+            response = await model_with_tools.ainvoke(messages)
+            messages.append(response)
+
+            if not response.tool_calls:
+                print(f"\n最终回复:\n{response.content}")
+                break
+
+            print(f"检测到 {len(response.tool_calls)} 个工具调用")
+            for tool_call in response.tool_calls:
+                print(f"调用 {tool_call['name']}: {tool_call['args']}")
+                found_tool = next((t for t in tools if t.name == tool_call["name"]), None)
+                if found_tool:
+                    tool_result = await found_tool.ainvoke(tool_call["args"])
+                    messages.append(ToolMessage(
+                        content=tool_result,
+                        tool_call_id=tool_call["id"]
+                    ))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+运行测试：
+
+```bash
+python src/langchain_mcp_test.py
+```
+
+可以看到：你让大模型查询用户，它识别到了工具调用，然后调用了 MCP 的工具。
+
+## MCP 的核心价值
+
+**MCP 本质上还是 Tool，和之前的 Tool 的区别只不过是可以跨进程调用。**
+
+跨进程就意味着不限语言，开发好之后，可以被任意 MCP Client 调用，比如 Cursor、LangChain、Claude Desktop 等。
+
+**这就是 MCP 的好处：写好之后可以插拔到任何地方当 Tool 用。**
+
+### 什么时候用 MCP？
+
+- ✅ 需要跨语言调用工具（Python 调 Java/Rust 写的工具）
+- ✅ 需要远程调用工具（工具部署在另一台服务器）
+- ✅ 需要工具被多个 Client 共享（Cursor、LangChain 都能用）
+- ❌ 不需要跨进程时，还是之前那样直接写 Tool 更好，还少了进程通信的成本
+
+## 学习要点
+
+1. **MCP = 可跨进程调用的 Tool**，通过统一协议实现工具复用
+2. **两种通信方式**：本地用 stdio，远程用 HTTP
+3. **MCP Server 提供两类能力**：Tool（执行操作）和 Resource（提供静态数据）
+4. **LangChain 中用 `langchain-mcp-adapters`** 把 MCP Server 封装成 Tools 来用
+5. **MCP 是行业通用协议**，由 Linux 基金会维护，中立于任何模型厂商
+
+## 扩展方向
+
+- 使用现成的 MCP Server（文件系统、数据库、浏览器等）
+- 开发 HTTP 传输模式的 MCP Server（远程调用）
+- 在 Cursor / Claude Desktop 中配置使用自己的 MCP Server
+- 组合多个 MCP Server 构建复杂的 Agent 系统
 
 ---
 
-**公众号：** 神光的幸福生活 | **作者：** 神说要有光 | **发布时间：** 2025-12-24 08:10:00 | **文章地址：** http://mp.weixin.qq.com/s?__biz=MzYzNzI2MTI2Nw==&mid=2247483924&idx=1&sn=f8329779692e50d669b7386eb613a8b4&chksm=f147744560593c4a0f98c8f3117428c21bb3de89ecfec078bcc3a8121431e20a959f964c3e73&scene=27#wechat_redirect
+## 配套代码库
+
+**代码库地址**：https://github.com/iiixiyan/agent-learning-code/tree/main/01-agent-basics/06-mcp-protocol
+
+包含本文的完整可运行代码示例（MCP Server + LangChain Client）。
+
+---
+
+**上一篇**：[实现 Mini Cursor：大模型自动调用 Tool 执行命令](./05_实现mini-cursor.md) | **下一篇**：[高德 MCP + 浏览器 MCP：LangChain 复用别人的 MCP Server](./07_高德MCP+浏览器MCP.md)
