@@ -1,26 +1,16 @@
-# 高德 MCP + 浏览器 MCP：LangChain 复用别人的 MCP Server 有多爽！
+# 高德 MCP + 浏览器 MCP：LangChain 复用别人的 MCP Server
 
-> **Python 版** | 原课程基于 Node.js(Nest.js) + LangChain JS，本文转换为 Python(FastAPI) + LangChain Python 技术栈
+> **Python 版** | 基于 FastAPI + LangChain Python 技术栈
 
 ---
 
-神光的幸福生活 2025年12月25日 13:12
+## 为什么要复用别人的 MCP Server？
 
-上节我们学了 MCP。
+上节我们学了 MCP，自己实现了一个 MCP Server，然后在 Cursor 或者 LangChain 里连上这个 Server，就可以用里面的 Tools 了。
 
-自己实现了一个 MCP Server，然后在 Cursor 或者 LangChain 里连上这个 server，就可以用里面的 tools 了。
+它本质上还是 Tool，只不过包了一层进程，可以通过 stdio 和 HTTP 来访问。
 
-> 🎬 视频演示（原公众号视频）
-
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/0_公众号_Yi昭.png)
-
-它本质上还是 tool，只不过包了一层进程，可以通过 stdio 和 http 来访问。
-
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/1_公众号_Yi昭.png)
-
-有这一层协议之后，有个巨大的好处：
-
-任何人都可以开发基于这个协议的 MCP Server，然后我们可以直接复用！
+有这一层协议之后，有个巨大的好处：**任何人都可以开发基于这个协议的 MCP Server，然后我们可以直接复用！**
 
 比如上节我们写的那个 MCP Server 就可以被别人用。
 
@@ -28,170 +18,366 @@
 
 我们用这三个 MCP Server：
 
-- 高德 MCP：可以做位置查询、路线规划等
-- Chrome DevTools MCP：控制浏览器，打开关闭页面、点击元素、截图等
-- FileSystem MCP：读写文件、创建目录等
+- **高德 MCP**：位置查询、路线规划、周边搜索等
+- **Chrome DevTools MCP**：控制浏览器，打开/关闭页面、点击元素、截图等
+- **FileSystem MCP**：读写文件、创建目录等
 
-首先是高德 MCP，我们需要先获取一个 apikey：
+## 一、高德 MCP
 
-https://developer.amap.com/
+### 获取 API Key
 
-> 🎬 视频演示（原公众号视频）
+首先需要获取一个高德地图 API Key：
 
-创建应用，然后创建一个 api key
+1. 打开 https://developer.amap.com/
+2. 注册/登录账号
+3. 进入「应用管理」→「我的应用」
+4. 创建应用，然后创建一个 API Key
+5. 服务平台选择「Web 服务」
 
-类型选 web 服务就行。
+### 两种接入方式
 
-然后我们先在 cursor 里测试下这个 mcp 服务是否可用：
+MCP 有两种接入方式：
 
-> 🎬 视频演示（原公众号视频）
+#### 方式一：HTTP 远程接入（推荐）
 
-可以看到，配好之后，就可以查到这个 mcp server 里的一堆 tool 了：
+```python
+# 在 MCP Client 配置中
+"amap-maps": {
+    "url": "https://mcp.amap.com/mcp?key=" + os.getenv("AMAP_MAPS_API_KEY")
+}
+```
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/2_公众号_Yi昭.png)
+这就是 HTTP 的接入方式，直接连接高德的远程 MCP Server。
 
-记得我们说过 mcp 有两种接入方式么？
+#### 方式二：stdio 本地进程接入
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/3_公众号_Yi昭.png)
+高德也支持 stdio 的本地进程接入方式，需要安装 npm 包：
 
-这就是 http 的接入方式。
+```bash
+npx -y @amap/amap-maps-mcp-server
+```
 
-当然，高德也支持 stdio 的本地进程的接入方式，这样写：
+```python
+"amap-maps": {
+    "command": "npx",
+    "args": ["-y", "@amap/amap-maps-mcp-server"],
+    "env": {
+        "AMAP_MAPS_API_KEY": os.getenv("AMAP_MAPS_API_KEY")
+    }
+}
+```
 
-    "amap-maps": {&nbsp;&nbsp;"command":&nbsp;"npx",&nbsp;&nbsp;"args": [&nbsp; &nbsp;&nbsp;"-y",&nbsp; &nbsp;&nbsp;"@amap/amap-maps-mcp-server"&nbsp; ],&nbsp;&nbsp;"env": {&nbsp; &nbsp;&nbsp;"AMAP_MAPS_API_KEY":&nbsp;"你的 api key"&nbsp; }},
+就是用命令行跑一个 npm 包，会创建一个支持 stdio 连接的进程，然后连上其中的 MCP Server 就好了。
 
-> 🎬 视频演示（原公众号视频）
+> **简历加分项**：你可以在简历里写——"开发了一个 MCP Server 的 Python 包，包含 xxx Tool，支持 stdio/HTTP 访问。可以在 Cursor 或 LangChain 里使用。" 这样面试官一看就知道，你是真懂 MCP 的，而且还有实践经验。
 
-就是用 python -m 跑一个 npm 包，会创建一个支持 stdio 连接的进程，然后连上其中的 mcp server 就好了。
+## 二、在 LangChain 中使用高德 MCP
 
-这个 mcp server 里肯定封装了和高德服务端的通信，本质上是一样的。
+在 tool-test 项目里创建 `src/mcp_amap_test.py`：
 
-其实你的前端简历里就可以写一下这个：
+```python
+"""
+LangChain 调用高德 MCP Server 示例
+"""
+import os
+import asyncio
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.messages import HumanMessage, ToolMessage
 
-我开发了一个 mcp server 的 npm 包，包含 xxx tool，支持 stdio 访问。可以在 cursor 或 langchain 里用 python -m 执行来连上这个 mcp server。
+load_dotenv()
 
-这样面试官一看就知道，这个人是真懂 MCP 的，而且还有实践经验。
 
-说回正题，我们在 langchain 里用一下这个 mcp：
+async def main():
+    # 1. 初始化大模型
+    model = ChatOpenAI(
+        model=os.getenv("MODEL_NAME", "qwen-plus"),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+        temperature=0,
+    )
 
-在 tool-test 项目里创建 src/mcp-test.mjs
+    # 2. 创建 MCP Client，连接高德 MCP Server（HTTP 方式）
+    mcp_client = MultiServerMCPClient({
+        "amap-maps": {
+            "url": "https://mcp.amap.com/mcp?key=" + os.getenv("AMAP_MAPS_API_KEY", "")
+        }
+    })
 
-    import&nbsp;'dotenv/config';import&nbsp;{ MultiServerMCPClient }&nbsp;from'langchain_mcp-adapters';import&nbsp;{ ChatOpenAI }&nbsp;from'langchain_openai';import&nbsp;chalk&nbsp;from'chalk';import&nbsp;{ HumanMessage, SystemMessage, ToolMessage }&nbsp;from'langchain_core/messages';const&nbsp;model =&nbsp;new&nbsp;ChatOpenAI({&nbsp;&nbsp; &nbsp;&nbsp;modelName:&nbsp;"qwen-plus",&nbsp; &nbsp;&nbsp;apiKey: process.env.OPENAI_API_KEY,&nbsp; &nbsp;&nbsp;configuration: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;baseURL: process.env.OPENAI_BASE_URL,&nbsp; &nbsp; },});const&nbsp;mcpClient =&nbsp;new&nbsp;MultiServerMCPClient({&nbsp; &nbsp;&nbsp;mcpServers: {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;'my-mcp-server': {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;command:&nbsp;"node",&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;args: [&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;"/Users/guang/code/tool-test/src/my-mcp-server.mjs"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ]&nbsp; &nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;"amap-maps-streamableHTTP": {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;"url":&nbsp;"https://mcp.amap.com/mcp?key="&nbsp;+ process.env.AMAP_MAPS_API_KEY&nbsp; &nbsp; &nbsp; &nbsp; },&nbsp; &nbsp; }});const&nbsp;tools =&nbsp;await&nbsp;mcpClient.getTools();const&nbsp;modelWithTools = model.bindTools(tools);asyncfunction&nbsp;runAgentWithTools(query, maxIterations =&nbsp;30)&nbsp;{&nbsp; &nbsp;&nbsp;const&nbsp;messages = [&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;new&nbsp;HumanMessage(query)&nbsp; &nbsp; ];&nbsp; &nbsp;&nbsp;for&nbsp;(let&nbsp;i =&nbsp;0; i &lt; maxIterations; i++) {&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(chalk.bgGreen(`⏳ 正在等待 AI 思考...`));&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;response =&nbsp;await&nbsp;modelWithTools.invoke(messages);&nbsp; &nbsp; &nbsp; &nbsp; messages.push(response);&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;// 检查是否有工具调用&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(!response.tool_calls || response.tool_calls.length ===&nbsp;0) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(`\n✨ AI 最终回复:\n${response.content}\n`);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;return&nbsp;response.content;&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(chalk.bgBlue(`🔍 检测到&nbsp;${response.tool_calls.length}&nbsp;个工具调用`));&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;console.log(chalk.bgBlue(`🔍 工具调用:&nbsp;${response.tool_calls.map(t =&gt; t.name).join(', ')}`));&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;// 执行工具调用&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;for&nbsp;(const&nbsp;toolCall&nbsp;of&nbsp;response.tool_calls) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;foundTool = tools.find(t&nbsp;=&gt;&nbsp;t.name === toolCall.name);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;if&nbsp;(foundTool) {&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;const&nbsp;toolResult =&nbsp;await&nbsp;foundTool.invoke(toolCall.args);&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; messages.push(new&nbsp;ToolMessage({&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;content: toolResult,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;tool_call_id: toolCall.id,&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }));&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; &nbsp; &nbsp; }&nbsp; &nbsp; }&nbsp; &nbsp;&nbsp;return&nbsp;messages[messages.length -&nbsp;1].content;}await&nbsp;runAgentWithTools("北京南站附近的酒店，以及去的路线");await&nbsp;mcpClient.close();
+    # 3. 获取 MCP 工具并绑定到模型
+    async with mcp_client as client:
+        tools = await client.get_tools()
+        print(f"获取到 {len(tools)} 个工具:")
+        for t in tools:
+            print(f"  - {t.name}")
 
-mcp client 的代码和上节一样，用 langchain_mcp-adapters
+        model_with_tools = model.bind_tools(tools)
 
-拿到其中的 tools 绑定给 model
+        # 4. 运行 Agent
+        messages = [
+            HumanMessage(content="北京南站附近的酒店，以及去的路线")
+        ]
 
-然后调用 model，如果有 tool\_calls 就调用下，把工具调用结果封装为 ToolMessage 传给大模型继续处理。
+        max_iterations = 10
+        for i in range(max_iterations):
+            print(f"\n=== 第 {i + 1} 步 ===")
+            response = await model_with_tools.ainvoke(messages)
+            messages.append(response)
 
-这里的高德 api key 同样放到了 .env 里：
+            if not response.tool_calls:
+                print(f"\n最终回复:\n{response.content}")
+                break
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/4_公众号_Yi昭.png)
+            print(f"检测到 {len(response.tool_calls)} 个工具调用")
+            for tool_call in response.tool_calls:
+                print(f"调用 {tool_call['name']}: {tool_call['args']}")
+                found_tool = next((t for t in tools if t.name == tool_call["name"]), None)
+                if found_tool:
+                    tool_result = await found_tool.ainvoke(tool_call["args"])
+                    # 确保 content 是字符串类型
+                    if isinstance(tool_result, str):
+                        content_str = tool_result
+                    elif hasattr(tool_result, 'text'):
+                        content_str = tool_result.text
+                    else:
+                        content_str = str(tool_result)
 
-先注释掉高德 mcp server 跑一下：
+                    messages.append(ToolMessage(
+                        content=content_str,
+                        tool_call_id=tool_call["id"]
+                    ))
 
-> 🎬 视频演示（原公众号视频）
 
-可以看到，大模型没法处理地理位置信息，让你用地图。
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
-我们启用高德 MCP Server：
+在 `.env` 中添加高德 API Key：
 
-> 🎬 视频演示（原公众号视频）
+```env
+AMAP_MAPS_API_KEY=你的高德API_KEY
+```
 
-现在，大模型就可以调用高德 mcp 里的 tool 给出酒店位置和路线了！
+运行测试：
 
-这就是 mcp 的好处，直接复用别人写好的 tool。
+```bash
+python src/mcp_amap_test.py
+```
 
-然后文件读写、创建目录这种，也不用自己写 tool，可以用现成 mcp：
+**效果对比**：
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/5_公众号_Yi昭.png)
+- ❌ 不启用高德 MCP：大模型没法处理地理位置信息，让你用地图查
+- ✅ 启用高德 MCP：大模型可以调用高德 MCP 里的 Tool，给出酒店位置和路线
 
-mcp 官方维护的一个 mcp server
+**这就是 MCP 的好处：直接复用别人写好的 Tool。**
 
-    "filesystem": {&nbsp; &nbsp;&nbsp;"command":&nbsp;"npx",&nbsp; &nbsp;&nbsp;"args": [&nbsp; &nbsp; &nbsp;&nbsp;"-y",&nbsp; &nbsp; &nbsp;&nbsp;"@modelcontextprotocol/server-filesystem",&nbsp; &nbsp; &nbsp; ...(process.env.ALLOWED_PATHS.split(',') ||&nbsp;'')&nbsp; &nbsp; ]}
+## 三、FileSystem MCP
 
-后面是可访问的目录，我们配在 .env 里：
+文件读写、创建目录这种，也不用自己写 Tool，可以用现成的 MCP。
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/6_公众号_Yi昭.png)
+这是 MCP 官方维护的一个 MCP Server：
 
-逗号分隔
+```python
+"filesystem": {
+    "command": "npx",
+    "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        *os.getenv("ALLOWED_PATHS", "").split(",")
+    ]
+}
+```
 
-我们可以先在 cursor 里配置下这个 mcp 服务，看下有哪些 tool：
+后面是可访问的目录，配在 `.env` 里，逗号分隔：
 
-> 🎬 视频演示（原公众号视频）
+```env
+ALLOWED_PATHS=/Users/yourname/Desktop,/Users/yourname/Documents
+```
 
-可以看到，有文件读写、目录创建、文件移动等 tool。
+FileSystem MCP 提供的 Tool 包括：
+- 读文件、写文件
+- 创建目录、列出目录
+- 移动文件、复制文件
+- 删除文件
 
-这样，配上这个 mcp，大模型就有文件读写能力了。
+### 注意：Tool 返回值处理
 
-不过这里还有个坑注意下：
+一般我们写 Tool 都是直接返回字符串，但是 FileSystem MCP 封装的这些 Tool 返回的是对象，有 text 属性，所以要处理下：
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/7_公众号_Yi昭.png)
+```python
+# 确保 content 是字符串类型
+if isinstance(tool_result, str):
+    content_str = tool_result
+elif hasattr(tool_result, 'text'):
+    # 如果返回对象有 text 字段，优先使用
+    content_str = tool_result.text
+else:
+    content_str = str(tool_result)
 
-一般我们写 tool 都是直接返回字符串，但是 FileSystem MCP 封装的这些 tool 返回的是对象，有 text 属性，所以要处理下：
+messages.append(ToolMessage(
+    content=content_str,
+    tool_call_id=tool_call["id"]
+))
+```
 
-    // 确保 content 是字符串类型let&nbsp;contentStr;if&nbsp;(typeof&nbsp;toolResult ===&nbsp;'string') {&nbsp; &nbsp; contentStr = toolResult;}&nbsp;else&nbsp;if&nbsp;(toolResult &amp;&amp; toolResult.text) {&nbsp; &nbsp;&nbsp;// 如果返回对象有 text 字段，优先使用&nbsp; &nbsp; contentStr = toolResult.text;}messages.push(new&nbsp;ToolMessage({&nbsp; &nbsp;&nbsp;content: contentStr,&nbsp; &nbsp;&nbsp;tool_call_id: toolCall.id,}));
+### 组合使用：高德 + FileSystem
 
-改下提示词：
+```python
+messages = [
+    HumanMessage(content="北京南站附近的5个酒店，以及去的路线，路线规划生成文档保存到桌面的一个 md 文件")
+]
+```
 
-    await&nbsp;runAgentWithTools("北京南站附近的5个酒店，以及去的路线，路线规划生成文档保存到 /Users/guang/Desktop 的一个 md 文件");
+运行后可以看到：
+1. 大模型首先调用高德 MCP 拿到了附近的酒店位置
+2. 然后规划了路线
+3. 最后调用 FileSystem MCP 写入了文件
 
-跑跑试试：
+**直接复用别人的 MCP，完全不用自己写。**
 
-> 🎬 视频演示（原公众号视频）
+## 四、Chrome DevTools MCP
 
-可以看到，大模型首先调用高德 mcp 拿到了附近的酒店位置，然后规划了路线
-
-最后调用 FileSystem MCP 写入了文件。
-
-直接复用别人的 MCP，完全不用自己写。
-
-你自己写的 tool 想给别人用，也可以封装成 MCP，最好发个 npm 包，这样还可以写到简历上去，让面试官用。
-
-最后我们再来用一下 Chrome Devtools 的 MCP，它是可以用来做浏览器自动化的。
+最后我们再来用一下 Chrome DevTools 的 MCP，它是可以用来做浏览器自动化的。
 
 比如打开页面、点击元素、截图等。
 
-在 cursor 配置下：
+### 配置方式
 
-    "chrome-devtools": {&nbsp;&nbsp;"command":&nbsp;"npx",&nbsp;&nbsp;"args": [&nbsp; &nbsp;&nbsp;"-y",&nbsp; &nbsp;&nbsp;"chrome-devtools-mcp@latest"&nbsp; ]}
+```python
+"chrome-devtools": {
+    "command": "npx",
+    "args": ["-y", "chrome-devtools-mcp@latest"]
+}
+```
 
-> 🎬 视频演示（原公众号视频）
+Chrome DevTools MCP 提供的 Tool 包括：
+- 打开/关闭浏览器标签页
+- 导航到 URL
+- 点击元素、输入文本
+- 截图
+- 获取页面内容
+- 执行 JavaScript
 
-可以看到很多工具。
+### 组合使用：高德 + Chrome DevTools
 
-在 langchain 里调用下：
+```python
+messages = [
+    HumanMessage(content="北京南站附近的酒店，最近的 3 个酒店，拿到酒店图片，打开浏览器，展示每个酒店的图片，每个 tab 一个 url 展示，并且把页面标题改为酒店名")
+]
+```
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/8_公众号_Yi昭.png)
+运行后可以看到：
+1. 搜到了北京南站最近的 3 个酒店
+2. 浏览器打开了酒店图片页面
 
-改下提示词：
+**只要配好 MCP，大模型就可以直接调用里面的 Tools 了。**
 
-    await&nbsp;runAgentWithTools("北京南站附近的酒店，最近的 3 个酒店，拿到酒店图片，打开浏览器，展示每个酒店的图片，每个 tab 一个 url 展示，并且在把那个页面标题改为酒店名");
+## 完整示例：三个 MCP 组合使用
 
-> 🎬 视频演示（原公众号视频）
+创建 `src/mcp_combined_test.py`：
 
-可以看到，搜到了北京南站最近的 3 个酒店，并且浏览器打开了酒店图片。
+```python
+"""
+LangChain 组合使用高德 + FileSystem + Chrome DevTools MCP Server
+"""
+import os
+import asyncio
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.messages import HumanMessage, ToolMessage
 
-只要配好 MCP，大模型就可以直接调用里面的 tools 了：
+load_dotenv()
 
-![image](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/9_公众号_Yi昭.png)
 
-> 代码上传了课程仓库： https://github.com/QuarkGluonPlasma/ai-agent-course-code/tool-test
+async def main():
+    model = ChatOpenAI(
+        model=os.getenv("MODEL_NAME", "qwen-plus"),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+        temperature=0,
+    )
 
-## 总结
+    # 组合三个 MCP Server
+    mcp_client = MultiServerMCPClient({
+        # 高德 MCP（HTTP 方式）
+        "amap-maps": {
+            "url": "https://mcp.amap.com/mcp?key=" + os.getenv("AMAP_MAPS_API_KEY", "")
+        },
+        # FileSystem MCP（stdio 方式）
+        "filesystem": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                *os.getenv("ALLOWED_PATHS", ".").split(",")
+            ]
+        },
+        # Chrome DevTools MCP（stdio 方式）
+        "chrome-devtools": {
+            "command": "npx",
+            "args": ["-y", "chrome-devtools-mcp@latest"]
+        }
+    })
 
-这节我们使用了高德、FileSystem、Chrome Devtools 的 MCP，用它们结合来实现了一些功能。
+    async with mcp_client as client:
+        tools = await client.get_tools()
+        print(f"共获取到 {len(tools)} 个工具")
 
-这些 MCP Server 有的是 stdio 本地进程调用，有的是 http 远程进程调用。
+        model_with_tools = model.bind_tools(tools)
 
-MCP 的一大好处就是别人开发好的，可以直接用。
+        messages = [
+            HumanMessage(content="北京南站附近最近的3个酒店，规划去每个酒店的路线，把结果保存为 md 文件到当前目录")
+        ]
 
-你全程不需要知道怎么用高德的 API 查询位置、路线，不需要知道怎么用 cdp 协议控制浏览器。
+        for i in range(15):
+            print(f"\n=== 第 {i + 1} 步 ===")
+            response = await model_with_tools.ainvoke(messages)
+            messages.append(response)
 
-你只需要把这些 MCP 给到 AI，让它自己去调用。
+            if not response.tool_calls:
+                print(f"\n最终回复:\n{response.content}")
+                break
 
-你不需要知道这些 tool 里面的高德 API 怎么用、浏览器控制怎么用，大模型会自己读取 tool 描述来传入参数调用。是不是特别爽！
+            for tool_call in response.tool_calls:
+                print(f"调用 {tool_call['name']}")
+                found_tool = next((t for t in tools if t.name == tool_call["name"]), None)
+                if found_tool:
+                    tool_result = await found_tool.ainvoke(tool_call["args"])
+                    content_str = tool_result if isinstance(tool_result, str) else (
+                        tool_result.text if hasattr(tool_result, 'text') else str(tool_result)
+                    )
+                    messages.append(ToolMessage(content=content_str, tool_call_id=tool_call["id"]))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## 学习要点
+
+1. **MCP 的核心价值**：别人开发好的 Tool，可以直接复用，不需要自己写
+2. **两种接入方式**：HTTP 远程接入（简单）和 stdio 本地进程接入（灵活）
+3. **返回值处理**：有些 MCP Server 的 Tool 返回对象而非字符串，需要统一处理
+4. **组合使用**：多个 MCP Server 可以组合使用，实现复杂功能
+5. **不需要懂底层 API**：你全程不需要知道怎么用高德的 API 查询位置、路线，不需要知道怎么用 CDP 协议控制浏览器，大模型会自己读取 Tool 描述来调用
+
+## 扩展方向
+
+- 探索更多现成的 MCP Server（数据库、邮件、Slack 等）
+- 开发自己的 MCP Server 并发布到 PyPI
+- 在 Cursor / Claude Desktop 中配置使用这些 MCP
+- 组合多个 MCP Server 构建完整的 Agent 应用
 
 ---
 
-**公众号：** 神光的幸福生活 | **作者：** 神说要有光 | **发布时间：** 2025-12-25 13:12:45 | **文章地址：** http://mp.weixin.qq.com/s?__biz=MzYzNzI2MTI2Nw==&mid=2247483989&idx=1&sn=1fdb1181382f1ae1c33083a5815e9459&chksm=f16fc32b9fbf48067f1b7aeafea622edbcca2a5391fae808bee0da2ff8488c1e074eedf2e229&scene=27#wechat_redirect
+## 配套代码库
+
+**代码库地址**：https://github.com/iiixiyan/agent-learning-code/tree/main/01-agent-basics/07-mcp-servers
+
+包含本文的完整可运行代码示例（高德 MCP + FileSystem MCP + Chrome DevTools MCP 组合使用）。
+
+---
+
+**上一篇**：[MCP：可跨进程调用的 Tool](./06_MCP-可跨进程调用的Tool.md) | **下一篇**：[RAG 检索增强：让大模型基于你的文档回答问题](./08_RAG检索增强-让大模型基于你的文档回答问题.md)
