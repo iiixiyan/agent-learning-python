@@ -86,6 +86,14 @@ Chunk 2:         [内容C 内容D 内容E]
 
 这个 Chunk 也是 Document 对象，只是文档内容是分割好的一个个大小合适的块。
 
+**Loader 与 Splitter 参考截图：**
+
+![LoaderSplitter1](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/0_公众号_Yi昭.png)
+
+![LoaderSplitter2](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/1_公众号_Yi昭.png)
+
+![LoaderSplitter3](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/2_公众号_Yi昭.png)
+
 ### 常见的 Splitter
 
 | Splitter 类型 | 用途 |
@@ -317,6 +325,16 @@ python src/loader_splitter_rag.py
 ```
 
 可以看到，Loader 加载了文档，用 Splitter 分成了多个分块（Chunk）。回答的时候检索了相似度最高的 2 个文档块，基于这个做了回答。
+
+**Loader + Splitter + RAG 实战参考截图：**
+
+![LoaderSplitter实战1](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/3_公众号_Yi昭.png)
+
+![LoaderSplitter实战2](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/4_公众号_Yi昭.png)
+
+![LoaderSplitter实战3](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/5_公众号_Yi昭.png)
+
+![LoaderSplitter实战4](../IMG/2026-01-05_知识库的loader和splitter：从各种来源加载文档并分割成小块/6_公众号_Yi昭.png)
 
 ## 核心概念总结
 
