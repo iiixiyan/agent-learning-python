@@ -547,8 +547,10 @@
         async function loadArticle(path, num) {
             currentArticle = { num, path };
             document.querySelectorAll('.article-item').forEach(el => el.classList.remove('active'));
-            event.target.closest('.article-item').classList.add('active');
-            
+            // 修复 event 兼容性：使用 currentTarget 或 closest 查找
+            const activeEl = (event && event.target) ? event.target.closest('.article-item') : document.querySelector(`.article-item[onclick*="${num}"]`);
+            if (activeEl) activeEl.classList.add('active');
+
             if (window.innerWidth <= 768) {
                 document.getElementById('sidebar').classList.remove('open');
             }
@@ -557,12 +559,16 @@
             content.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:16px;">加载中...</p></div>';
 
             try {
-                const resp = await fetch(basePath + path);
-                if (!resp.ok) throw new Error('文件不存在');
+                // 修复：对包含中文的路径进行 URL 编码
+                const fullUrl = encodeURI(basePath + path);
+                const resp = await fetch(fullUrl);
+                if (!resp.ok) throw new Error('文件不存在 (HTTP ' + resp.status + ')');
                 const md = await resp.text();
-                
-                // 修正图片路径（使用绝对路径，避免无尾部斜杠时解析错误）
-                let processedMd = md.replace(/\.\.\/IMG\//g, basePath + 'IMG/');
+
+                // 修正图片路径（使用绝对路径，并对中文路径进行编码）
+                let processedMd = md.replace(/\.\.\/IMG\/([^\s\)]+)/g, function(match, imgPath) {
+                    return encodeURI(basePath + 'IMG/' + imgPath);
+                });
                 
                 marked.setOptions({
                     highlight: function(code, lang) {
