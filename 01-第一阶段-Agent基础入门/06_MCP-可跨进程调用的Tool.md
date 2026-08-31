@@ -96,6 +96,18 @@ MCP 最大的特点就是可以**跨进程调用工具**：
 
 > MCP 由 AI 巨头 Anthropic 公司发起并开发，2025 年 12 月交给了 Linux 基金会维护。也就是说它现在是完全中立于任何一个模型的行业通用协议。
 
+**MCP 架构与概念参考截图：**
+
+![MCP概念1](../IMG/2025-12-24_MCP：可跨进程调用的Tool/0_公众号_Yi昭.png)
+
+![MCP概念2](../IMG/2025-12-24_MCP：可跨进程调用的Tool/1_公众号_Yi昭.png)
+
+![MCP概念3](../IMG/2025-12-24_MCP：可跨进程调用的Tool/2_公众号_Yi昭.png)
+
+![MCP概念4](../IMG/2025-12-24_MCP：可跨进程调用的Tool/3_公众号_Yi昭.png)
+
+![MCP概念5](../IMG/2025-12-24_MCP：可跨进程调用的Tool/4_公众号_Yi昭.png)
+
 ## 实战：用 Python 写一个 MCP Server
 
 继续在 tool-test 项目里写。
@@ -227,6 +239,22 @@ python src/my_mcp_server.py
 
 这样，我们的 MCP 服务就创建好了！其实就是 Tool，加上了协议而已。
 
+**MCP Server 开发参考截图：**
+
+![MCP Server开发1](../IMG/2025-12-24_MCP：可跨进程调用的Tool/5_公众号_Yi昭.png)
+
+![MCP Server开发2](../IMG/2025-12-24_MCP：可跨进程调用的Tool/6_公众号_Yi昭.png)
+
+![MCP Server开发3](../IMG/2025-12-24_MCP：可跨进程调用的Tool/7_公众号_Yi昭.png)
+
+![MCP Server开发4](../IMG/2025-12-24_MCP：可跨进程调用的Tool/8_公众号_Yi昭.png)
+
+![MCP Server开发5](../IMG/2025-12-24_MCP：可跨进程调用的Tool/9_公众号_Yi昭.png)
+
+![MCP Server开发6](../IMG/2025-12-24_MCP：可跨进程调用的Tool/10_公众号_Yi昭.png)
+
+![MCP Server开发7](../IMG/2025-12-24_MCP：可跨进程调用的Tool/11_公众号_Yi昭.png)
+
 ## 在 LangChain 中调用 MCP Server
 
 创建 `src/langchain_mcp_test.py`：
@@ -314,6 +342,20 @@ python src/langchain_mcp_test.py
 ```
 
 可以看到：你让大模型查询用户，它识别到了工具调用，然后调用了 MCP 的工具。
+
+**LangChain 调用 MCP Server 参考截图：**
+
+![LangChain调用MCP1](../IMG/2025-12-24_MCP：可跨进程调用的Tool/12_公众号_Yi昭.png)
+
+![LangChain调用MCP2](../IMG/2025-12-24_MCP：可跨进程调用的Tool/13_公众号_Yi昭.png)
+
+![LangChain调用MCP3](../IMG/2025-12-24_MCP：可跨进程调用的Tool/14_公众号_Yi昭.png)
+
+![LangChain调用MCP4](../IMG/2025-12-24_MCP：可跨进程调用的Tool/15_公众号_Yi昭.png)
+
+![LangChain调用MCP5](../IMG/2025-12-24_MCP：可跨进程调用的Tool/16_公众号_Yi昭.png)
+
+![LangChain调用MCP6](../IMG/2025-12-24_MCP：可跨进程调用的Tool/17_公众号_Yi昭.png)
 
 ## MCP 的核心价值
 
