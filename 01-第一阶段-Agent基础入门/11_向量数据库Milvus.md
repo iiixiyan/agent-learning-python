@@ -85,6 +85,28 @@ https://github.com/zilliztech/attu
 
 下载安装后，用默认配置连接（localhost:19530），就可以看到所有的集合、集合下所有的 Entity。
 
+**Milvus 安装与 Attu GUI 工具参考截图：**
+
+![Milvus安装1](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/0_公众号_Yi昭.png)
+
+![Milvus安装2](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/1_公众号_Yi昭.png)
+
+![Milvus安装3](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/2_公众号_Yi昭.png)
+
+![Milvus安装4](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/3_公众号_Yi昭.png)
+
+![Milvus安装5](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/4_公众号_Yi昭.png)
+
+![Milvus安装6](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/5_公众号_Yi昭.png)
+
+![Milvus安装7](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/6_公众号_Yi昭.png)
+
+![Milvus安装8](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/7_公众号_Yi昭.png)
+
+![Milvus安装9](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/8_公众号_Yi昭.png)
+
+![Milvus安装10](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/9_公众号_Yi昭.png)
+
 ## Milvus 数据结构
 
 在 Milvus 里是这样存储数据的：
@@ -720,6 +742,50 @@ python src/delete_data.py
 这个不用向量化数据，也就不用嵌入模型。这里用了 expr（表达式），根据条件来删除，或者 `id in ["id1", "id2"]` 这样来批量删除。
 
 可以看到，数据都被正确删除了。这样我们就完成了对 Milvus 数据的增删改查。
+
+**Milvus Python 操作实战参考截图：**
+
+![Milvus实战1](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/10_公众号_Yi昭.png)
+
+![Milvus实战2](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/11_公众号_Yi昭.png)
+
+![Milvus实战3](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/12_公众号_Yi昭.png)
+
+![Milvus实战4](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/13_公众号_Yi昭.png)
+
+![Milvus实战5](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/14_公众号_Yi昭.png)
+
+![Milvus实战6](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/15_公众号_Yi昭.png)
+
+![Milvus实战7](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/16_公众号_Yi昭.png)
+
+![Milvus实战8](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/17_公众号_Yi昭.png)
+
+![Milvus实战9](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/18_公众号_Yi昭.png)
+
+![Milvus实战10](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/19_公众号_Yi昭.png)
+
+![Milvus实战11](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/20_公众号_Yi昭.png)
+
+![Milvus实战12](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/21_公众号_Yi昭.png)
+
+![Milvus实战13](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/22_公众号_Yi昭.png)
+
+![Milvus实战14](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/23_公众号_Yi昭.png)
+
+![Milvus实战15](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/24_公众号_Yi昭.png)
+
+![Milvus实战16](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/25_公众号_Yi昭.png)
+
+![Milvus实战17](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/26_公众号_Yi昭.png)
+
+![Milvus实战18](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/27_公众号_Yi昭.png)
+
+![Milvus实战19](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/28_公众号_Yi昭.png)
+
+![Milvus实战20](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/29_公众号_Yi昭.png)
+
+![Milvus实战21](../IMG/2026-01-13_向量数据库Milvus：做AIAgent开发必备技术/30_公众号_Yi昭.png)
 
 ## Milvus 操作总结
 
