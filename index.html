@@ -7,6 +7,18 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        // 保护：如果 highlight.js 加载失败，定义空对象避免后续报错
+        if (typeof hljs === 'undefined') {
+            window.hljs = {
+                highlightElement: function() {},
+                highlight: function(code) { return { value: code }; },
+                highlightAuto: function(code) { return { value: code }; },
+                getLanguage: function() { return false; }
+            };
+            console.warn('highlight.js 加载失败，使用降级模式');
+        }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
