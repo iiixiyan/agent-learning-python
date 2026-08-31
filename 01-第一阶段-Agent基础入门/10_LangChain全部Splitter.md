@@ -89,6 +89,18 @@ TextSplitter（基类）
 | LatexTextSplitter | 按照数学公式语法来递归分割 |
 | TokenTextSplitter | 按照 Token 数来分割 |
 
+**各种 Splitter 参考截图：**
+
+![Splitter1](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/0_公众号_Yi昭.png)
+
+![Splitter2](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/1_公众号_Yi昭.png)
+
+![Splitter3](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/2_公众号_Yi昭.png)
+
+![Splitter4](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/3_公众号_Yi昭.png)
+
+![Splitter5](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/4_公众号_Yi昭.png)
+
 ## Token 是什么？
 
 在讲 TokenTextSplitter 之前，先了解一下 Token。
@@ -697,6 +709,38 @@ python src/code_splitter_test.py
 支持的语言有很多，包括：java、go、js、html、python、rust、swift、markdown 等。
 
 可以看到，完全没有破坏代码完整性，确实是按照语法分割的。
+
+**各种 Splitter 实战代码与运行结果参考截图：**
+
+![Splitter实战1](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/5_公众号_Yi昭.png)
+
+![Splitter实战2](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/6_公众号_Yi昭.png)
+
+![Splitter实战3](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/7_公众号_Yi昭.png)
+
+![Splitter实战4](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/8_公众号_Yi昭.png)
+
+![Splitter实战5](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/9_公众号_Yi昭.png)
+
+![Splitter实战6](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/10_公众号_Yi昭.png)
+
+![Splitter实战7](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/11_公众号_Yi昭.png)
+
+![Splitter实战8](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/12_公众号_Yi昭.png)
+
+![Splitter实战9](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/13_公众号_Yi昭.png)
+
+![Splitter实战10](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/14_公众号_Yi昭.png)
+
+![Splitter实战11](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/15_公众号_Yi昭.png)
+
+![Splitter实战12](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/16_公众号_Yi昭.png)
+
+![Splitter实战13](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/17_公众号_Yi昭.png)
+
+![Splitter实战14](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/18_公众号_Yi昭.png)
+
+![Splitter实战15](../IMG/2026-01-10_LangChain全部Splitter，其实只需要其中的一个/19_公众号_Yi昭.png)
 
 ## 各种 Splitter 对比总结
 
