@@ -71,6 +71,16 @@ npx -y @amap/amap-maps-mcp-server
 
 > **简历加分项**：你可以在简历里写——"开发了一个 MCP Server 的 Python 包，包含 xxx Tool，支持 stdio/HTTP 访问。可以在 Cursor 或 LangChain 里使用。" 这样面试官一看就知道，你是真懂 MCP 的，而且还有实践经验。
 
+**高德 MCP 配置参考截图：**
+
+![高德MCP配置1](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/0_公众号_Yi昭.png)
+
+![高德MCP配置2](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/1_公众号_Yi昭.png)
+
+![高德MCP配置3](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/2_公众号_Yi昭.png)
+
+![高德MCP配置4](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/3_公众号_Yi昭.png)
+
 ## 二、在 LangChain 中使用高德 MCP
 
 在 tool-test 项目里创建 `src/mcp_amap_test.py`：
@@ -171,6 +181,20 @@ python src/mcp_amap_test.py
 - ✅ 启用高德 MCP：大模型可以调用高德 MCP 里的 Tool，给出酒店位置和路线
 
 **这就是 MCP 的好处：直接复用别人写好的 Tool。**
+
+**LangChain 调用高德 MCP 参考截图：**
+
+![高德MCP调用1](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/4_公众号_Yi昭.png)
+
+![高德MCP调用2](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/5_公众号_Yi昭.png)
+
+![FileSystem+Chrome MCP1](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/6_公众号_Yi昭.png)
+
+![FileSystem+Chrome MCP2](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/7_公众号_Yi昭.png)
+
+![组合使用MCP1](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/8_公众号_Yi昭.png)
+
+![组合使用MCP2](../IMG/2025-12-25_高德MCP浏览器MCP：LangChain复用别人的MCPServer有多爽/9_公众号_Yi昭.png)
 
 ## 三、FileSystem MCP
 
