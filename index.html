@@ -570,24 +570,29 @@
                     return encodeURI(basePath + 'IMG/' + imgPath);
                 });
                 
+                // marked 配置（移除 highlight 选项，避免与新版 marked 冲突）
                 marked.setOptions({
-                    highlight: function(code, lang) {
-                        if (lang && hljs.getLanguage(lang)) {
-                            return hljs.highlight(code, { language: lang }).value;
-                        }
-                        return hljs.highlightAuto(code).value;
-                    },
                     breaks: true,
                     gfm: true
                 });
 
                 const html = marked.parse(processedMd);
                 content.innerHTML = `<div class="article-content">${html}</div>`;
-                
-                // 代码高亮
-                content.querySelectorAll('pre code').forEach(block => {
-                    hljs.highlightElement(block);
-                });
+
+                // 代码高亮（添加 try-catch，避免高亮失败影响文章加载）
+                try {
+                    if (typeof hljs !== 'undefined' && hljs.highlightElement) {
+                        content.querySelectorAll('pre code').forEach(block => {
+                            try {
+                                hljs.highlightElement(block);
+                            } catch (e) {
+                                // 单个代码块高亮失败不影响其他
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('代码高亮失败:', e);
+                }
                 
                 // 滚动到顶部
                 content.scrollTop = 0;
